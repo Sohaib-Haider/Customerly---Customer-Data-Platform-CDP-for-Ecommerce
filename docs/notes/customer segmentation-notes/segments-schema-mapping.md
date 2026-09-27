@@ -1,3 +1,23 @@
+---
+title: "Segments → Schema Mapping"
+description: "Maps 9 customer segments to raw dataset attributes, target schema tables/columns, and computed features. Documents which attributes each segment needs and which are not needed."
+version: "1.0"
+last_updated: "2026-09-27"
+segments_covered: 9
+datasets_referenced:
+  - "vasudeva009/predicting-coupon-redemption"
+  - "mkechinov/direct-messaging"
+  - "frtgnn/dunnhumby-the-complete-journey"
+  - "mkechinov/ecommerce-behavior-data-from-multi-category-store"
+  - "samuelsemaya/e-commerce-customer-churn"
+  - "mashlyn/online-retail-ii-uci"
+tags:
+  - schema-mapping
+  - customer-segmentation
+  - feature-engineering
+  - data-modeling
+---
+
 # Segments → Schema Mapping
 
 Purpose: For each of the 9 segments, document what it is, whether it needs ML, and exactly which attributes (and target tables/columns) are required.
@@ -34,7 +54,7 @@ Purpose: For each of the 9 segments, document what it is, whether it needs ML, a
 | user_session | Groups events into sessions | events | session_id |
 | event_time | Recency of browsing | events | event_timestamp |
 
-**All 9 attributes needed. No removals.**
+**All 9 attributes needed for this segment.**
 
 ### Computed Features (derived → stored in `customer_features`)
 
@@ -47,11 +67,13 @@ Purpose: For each of the 9 segments, document what it is, whether it needs ML, a
 | cart_to_purchase_rate | `purchase_count / cart_count` | derived from purchase_count, cart_count | Division of two computed features |
 | last_view_days | `CURRENT_DATE - MAX(event_timestamp) WHERE event_type='view'` | events.event_timestamp, events.event_type | SQL date diff, filter event_type |
 | session_count | `COUNT(DISTINCT session_id)` | events.session_id | SQL GROUP BY customer_id |
-| avg_session_value | `AVG(price) WHERE event_type='view'` | events.price, events.event_type | SQL AVG, filter event_type |
+| avg_viewed_price | `AVG(price) WHERE event_type='view'` | events.price, events.event_type | SQL AVG, filter event_type |
+| cart_removal_count | `COUNT(*) WHERE event_type='remove_from_cart'` | events.event_type | SQL GROUP BY customer_id |
+| cart_removal_rate | `cart_removal_count / cart_count` | derived from cart_removal_count, cart_count | Division of two computed features |
 
-**8 computed features for Predicted Purchase Intent. All computed via SQL GROUP BY customer_id on the events table.**
+**10 computed features for Predicted Purchase Intent. All computed via SQL GROUP BY customer_id on the events table.**
 
-**Removed:** `category_diversity`, `brand_diversity` — these measure breadth of browsing, not purchase intent.
+**Not needed for this segment:** `category_diversity`, `brand_diversity` — these measure breadth of browsing, not purchase intent.
 
 ---
 
@@ -93,11 +115,15 @@ Purpose: For each of the 9 segments, document what it is, whether it needs ML, a
 | customer_tenure | `CURRENT_DATE - MIN(order_date)` | orders.order_date | SQL MIN per customer |
 | total_items_bought | `SUM(quantity)` | order_items.quantity | SQL SUM per customer |
 | unique_products_bought | `COUNT(DISTINCT product_id)` | order_items.product_id | SQL COUNT DISTINCT per customer |
-| max_single_order_value | `MAX(sales_value)` | order_items.sales_value | SQL MAX per customer |
-| min_single_order_value | `MIN(sales_value)` | order_items.sales_value | SQL MIN per customer |
+| max_single_order_value | `MAX(quantity * unit_price)` | order_items.quantity, order_items.unit_price | SQL MAX per customer |
+| min_single_order_value | `MIN(quantity * unit_price)` | order_items.quantity, order_items.unit_price | SQL MIN per customer |
 | purchase_regularity | `STDDEV(days between consecutive orders)` | orders.order_date | SQL window function (LAG) per customer |
 
-**7 raw attributes + 10 computed features. Removed: `Country` (no segment/KPI uses geo).**
+**7 raw attributes + 10 computed features. Not needed for this segment: `Country` (no segment/KPI uses geo).**
+
+**Pricing note:** `monetary` and `avg_order_value` deliberately use `quantity * unit_price` — the amount the store actually received. For Online Retail II, `Price` (mapped to `unit_price`) has no discount columns, so `quantity * unit_price` is unambiguous. For Dunnhumby-style sources, `SALES_VALUE` (mapped to `sales_value`) is the net amount after `RETAIL_DISC` and `COUPON_MATCH_DISC`; `COUPON_DISC` is reimbursed to the store and never deducted. Use `quantity * unit_price` for Online Retail II and `sales_value` directly for Dunnhumby — do not apply the same formula across both sources.
+
+**Note:** Source column `Price` → target `unit_price` (lowercase). All formulas reference `unit_price` consistently.
 
 ---
 
@@ -129,6 +155,7 @@ Purpose: For each of the 9 segments, document what it is, whether it needs ML, a
 | customer_id (train) | customers | source_customer_id |
 | campaign_id | coupon_campaigns | source_campaign_id |
 | coupon_id | coupon_redemptions | coupon_id |
+| customer_id (train) | coupon_redemptions | customer_id |
 | redemption_status | coupon_redemptions | redemption_status |
 | campaign_type | coupon_campaigns | campaign_type |
 | start_date | coupon_campaigns | start_date |
@@ -136,7 +163,7 @@ Purpose: For each of the 9 segments, document what it is, whether it needs ML, a
 | date | orders | order_date |
 | item_id (transaction) | products | source_product_id |
 | quantity | order_items | quantity |
-| selling_price | order_items | selling_price |
+| selling_price | order_items | net_sales_value |
 | other_discount | order_items | other_discount |
 | coupon_discount | order_items | coupon_discount |
 | brand | products | brand |
@@ -147,14 +174,16 @@ Purpose: For each of the 9 segments, document what it is, whether it needs ML, a
 | Computed Feature | Formula | Attributes Used | How Computed |
 |---|---|---|---|
 | total_discount_received | `SUM(other_discount + coupon_discount)` | order_items.other_discount, order_items.coupon_discount | SQL SUM per customer |
-| discount_dependency_ratio | `SUM(other_discount + coupon_discount) / SUM(selling_price)` | order_items.other_discount, order_items.coupon_discount, order_items.selling_price | SQL SUM / SUM per customer |
+| discount_dependency_ratio | `SUM(other_discount + coupon_discount) / SUM(net_sales_value)` | order_items.other_discount, order_items.coupon_discount, order_items.net_sales_value | SQL SUM / SUM per customer |
 | coupon_redemption_rate | `COUNT(redemption_status=1) / COUNT(*)` | coupon_redemptions.redemption_status | SQL COUNT per customer |
 | avg_discount_per_order | `AVG(other_discount + coupon_discount)` | order_items.other_discount, order_items.coupon_discount | SQL AVG per customer |
 | discount_order_frequency | `COUNT(orders with discount > 0) / COUNT(total orders)` | order_items.other_discount, order_items.coupon_discount | SQL COUNT per customer |
 
-**Removed:** All demographics (age_range, marital_status, rented, family_size, no_of_children, income_bracket, brand_type)
+**Not needed for this segment:** All demographics (age_range, marital_status, rented, family_size, no_of_children, income_bracket, brand_type)
 
 **Customers table stays at 12 columns. No changes needed.**
+
+**Verification needed:** Confirm whether `selling_price` is net (post-discount) or gross. If gross, `discount_dependency_ratio` will underestimate dependency. To verify: check if `selling_price + other_discount + coupon_discount` matches a known gross value, or compare with `coupon_discount` patterns in the data. If `selling_price` is gross, use `selling_price + other_discount + coupon_discount` as `net_sales_value` in all formulas.
 
 ---
 
@@ -190,9 +219,11 @@ Purpose: For each of the 9 segments, document what it is, whether it needs ML, a
 
 None needed. These are pre-computed features from the dataset, fed directly into the ML model.
 
-**Removed from dataset (not needed):** `MaritalStatus`, `NumberOfAddress`, `PreferedOrderCat` — no direct link to churn behavior.
+**Not needed for this segment:** `MaritalStatus`, `NumberOfAddress`, `PreferedOrderCat` — no direct link to churn behavior.
 
 **Customers table: no changes needed.** All 8 attributes already exist.
+
+**Note:** `DaySinceLastOrder` retained for analysis — high target leakage risk (churn likely defined by this feature). Analyze leakage before training; may need exclusion from production model.
 
 ---
 
@@ -247,17 +278,26 @@ None needed. These are pre-computed features from the dataset, fed directly into
 
 | Computed Feature | Formula | Attributes Used | How Computed |
 |---|---|---|---|
-| email_open_rate | `COUNT(is_opened=1 WHERE channel='email') / COUNT(WHERE channel='email')` | message_sends.is_opened, message_sends.channel | SQL per customer |
-| email_click_rate | `COUNT(is_clicked=1 WHERE channel='email') / COUNT(WHERE channel='email')` | message_sends.is_clicked, message_sends.channel | SQL per customer |
-| whatsapp_open_rate | `COUNT(is_opened=1 WHERE channel='whatsapp') / COUNT(WHERE channel='whatsapp')` | message_sends.is_opened, message_sends.channel | SQL per customer |
-| sms_open_rate | `COUNT(is_opened=1 WHERE channel='sms') / COUNT(WHERE channel='sms')` | message_sends.is_opened, message_sends.channel | SQL per customer |
+| email_open_rate | `COUNT(is_opened=1 WHERE channel_norm='email') / COUNT(WHERE channel_norm='email')` | message_sends.is_opened, message_sends.channel_norm | SQL per customer |
+| email_click_rate | `COUNT(is_clicked=1 WHERE channel_norm='email') / COUNT(WHERE channel_norm='email')` | message_sends.is_clicked, message_sends.channel_norm | SQL per customer |
+| push_open_rate | `COUNT(is_opened=1 WHERE channel_norm='push') / COUNT(WHERE channel_norm='push')` | message_sends.is_opened, message_sends.channel_norm | SQL per customer |
+| sms_open_rate | `COUNT(is_opened=1 WHERE channel_norm='sms') / COUNT(WHERE channel_norm='sms')` | message_sends.is_opened, message_sends.channel_norm | SQL per customer |
 | unsubscribe_rate | `COUNT(is_unsubscribed=1) / COUNT(*)` | message_sends.is_unsubscribed | SQL per customer |
 | bounce_rate | `COUNT(is_hard_bounced=1 OR is_soft_bounced=1) / COUNT(*)` | message_sends.is_hard_bounced, message_sends.is_soft_bounced | SQL per customer |
 | purchase_rate | `COUNT(is_purchased=1) / COUNT(*)` | message_sends.is_purchased | SQL per customer |
 
-**Removed from campaigns.csv:** `ab_test`, `warmup_mode`, `hour_limit`, `subject_length`, `subject_with_personalization`, `subject_with_deadline`, `subject_with_emoji`, `subject_with_bonuses`, `subject_with_discount`, `subject_with_saleout`, `is_test`, `position` — A/B testing config, not needed.
+**Channel Normalization Mapping** (applied to `message_sends.channel` → `channel_norm`):
 
-**Removed from messages-demo.csv:** `category`, `platform`, `email_provider`, `stream` — technical metadata, not needed.
+| Raw Channel | Normalized Channel |
+|---|---|
+| email | email |
+| sms | sms |
+| web_push | push |
+| mobile_push | push |
+
+**Not needed from campaigns.csv for this segment:** `ab_test`, `warmup_mode`, `hour_limit`, `subject_length`, `subject_with_personalization`, `subject_with_deadline`, `subject_with_emoji`, `subject_with_bonuses`, `subject_with_discount`, `subject_with_saleout`, `is_test`, `position` — A/B testing config, not needed.
+
+**Not needed from messages-demo.csv for this segment:** `category`, `platform`, `email_provider`, `stream` — technical metadata, not needed.
 
 **New tables needed:** `marketing_campaigns`, `message_sends`, `holidays`
 
@@ -272,18 +312,19 @@ None needed. These are pre-computed features from the dataset, fed directly into
 **Dataset:** Dunnhumby: The Complete Journey
 **Kaggle URL:** https://www.kaggle.com/datasets/frtgnn/dunnhumby-the-complete-journey
 
-### Raw Attributes Needed (11)
+### Raw Attributes Needed (13)
 
 | Raw Attribute | Target Table | Target Column | Strength | Justification |
 |---|---|---|---|---|
 | household_key | customers | source_customer_id | ESSENTIAL | Customer identifier |
 | BASKET_ID | orders | source_order_id | ESSENTIAL | Order identifier |
-| DAY | orders | order_date | ESSENTIAL | When they bought |
+| DAY | orders | day_no | ESSENTIAL | Native study day (1-711) for interval math |
+| DAY | orders | order_date | ESSENTIAL | Synthetic date: anchor_date + (day_no - 1) |
 | PRODUCT_ID | products | source_product_id | ESSENTIAL | Which product |
 | QUANTITY | order_items | quantity | STRONG | Consumption rate |
 | SALES_VALUE | order_items | sales_value | STRONG | Monetary value |
 | WEEK_NO | orders | week_no | MODERATE | Seasonal pattern |
-| STORE_ID | orders | region | MODERATE | Regional pattern |
+| STORE_ID | orders | store_id | MODERATE | Store identifier for causal_data join |
 | DEPARTMENT | products | department | MODERATE | Category analysis |
 | BRAND | products | brand | MODERATE | Brand loyalty |
 | COMMODITY_DESC | products | commodity_desc | MODERATE | Product grouping |
@@ -292,13 +333,12 @@ None needed. These are pre-computed features from the dataset, fed directly into
 
 | Computed Feature | Formula | Attributes Used | How Computed |
 |---|---|---|---|
-| days_since_last_purchase | `CURRENT_DATE - MAX(order_date)` per customer per product | orders.order_date, order_items.product_id | SQL per customer+product |
+| days_since_last_purchase | `(SELECT MAX(day_no) FROM orders) - MAX(day_no)` per customer per product | orders.day_no, order_items.product_id | SQL per customer+product |
 | purchase_frequency | `COUNT(DISTINCT source_order_id)` per customer per product | orders.source_order_id, order_items.product_id | SQL per customer+product |
-| avg_days_between_purchases | `AVG(days between consecutive purchases)` per customer per product | orders.order_date, order_items.product_id | SQL window function per customer+product |
+| avg_days_between_purchases | `AVG(day_no - LAG(day_no) OVER (PARTITION BY customer_id, product_id ORDER BY day_no))` per customer per product | orders.day_no, order_items.product_id | SQL window function per customer+product |
 | product_loyalty | `COUNT(DISTINCT product_id)` per customer | order_items.product_id | SQL COUNT DISTINCT per customer |
-| replenishment_cycle | `STDDEV(days between purchases)` per customer per product | orders.order_date, order_items.product_id | SQL window function per customer+product |
 
-### Removed Attributes
+### Attributes Not Needed
 
 | Attribute | Reason |
 |---|---|
@@ -315,9 +355,9 @@ None needed. These are pre-computed features from the dataset, fed directly into
 
 | Table | Change |
 |---|---|
-| `orders` | Add `week_no` (INT) — for seasonal/replenishment patterns |
+| `orders` | Add `week_no` (SMALLINT NULL), `day_no` (SMALLINT), `order_date` (DATE), `store_id` (INT). `day_no` = native Dunnhumby DAY (1-711). `order_date` = anchor_date + (day_no - 1) (anchor configurable, default 2016-01-01). `week_no` = native WEEK_NO (1-104). `store_id` = native STORE_ID for causal_data join. |
 
-**Customers table: no changes needed.** All 11 attributes already exist in existing tables.
+**Customers table: no changes needed.** All 13 attributes already exist in existing tables.
 
 ---
 
@@ -330,13 +370,14 @@ None needed. These are pre-computed features from the dataset, fed directly into
 **Dataset:** Dunnhumby: The Complete Journey
 **Kaggle URL:** https://www.kaggle.com/datasets/frtgnn/dunnhumby-the-complete-journey
 
-### Raw Attributes Needed (7)
+### Raw Attributes Needed (9)
 
 | Raw Attribute | Target Table | Target Column | Strength | Justification |
 |---|---|---|---|---|
 | household_key | customers | source_customer_id | ESSENTIAL | Customer identifier |
 | BASKET_ID | orders | source_order_id | ESSENTIAL | Groups items bought together |
-| DAY | orders | order_date | ESSENTIAL | When they bought |
+| DAY | orders | day_no | ESSENTIAL | Native study day (1-711) for interval math |
+| DAY | orders | order_date | ESSENTIAL | Synthetic date: anchor_date + (day_no - 1) |
 | PRODUCT_ID | products | source_product_id | ESSENTIAL | Which product |
 | DEPARTMENT | products | department | STRONG | Category for finding complementary products |
 | BRAND | products | brand | MODERATE | Brand affinity |
@@ -349,10 +390,11 @@ None needed. These are pre-computed features from the dataset, fed directly into
 | basket_size | `COUNT(DISTINCT product_id)` per order | order_items.product_id | SQL COUNT DISTINCT per order |
 | category_diversity | `COUNT(DISTINCT department)` per customer | products.department | SQL COUNT DISTINCT per customer |
 | cross_category_purchase | `COUNT(DISTINCT department) / COUNT(DISTINCT product_id)` | products.department, order_items.product_id | SQL ratio per customer |
+| primary_dept | `MODE(department) OVER (PARTITION BY customer_id ORDER BY COUNT(*) DESC)` | products.department, order_items.product_id | SQL per customer |
 | complementary_affinity | `COUNT(DISTINCT product_id WHERE department != primary_dept)` | products.department, order_items.product_id | SQL per customer |
 | brand_concentration | `COUNT(DISTINCT brand) / COUNT(DISTINCT product_id)` | products.brand, order_items.product_id | SQL ratio per customer |
 
-### Removed Attributes
+### Attributes Not Needed
 
 | Attribute | Reason |
 |---|---|
@@ -365,12 +407,12 @@ None needed. These are pre-computed features from the dataset, fed directly into
 | SUB_COMMODITY_DESC | Too granular |
 | CURR_SIZE_OF_PRODUCT | Not needed |
 | RETAIL_DISC, COUPON_DISC, COUPON_MATCH_DISC | Discount data — Discount Responsive's job |
-| WEEK_NO | Already in orders table |
+| WEEK_NO | Already in `orders` — added in Segment 6 |
 | coupon.csv, coupon_redempt.csv, campaign_table.csv, campaign_desc.csv | Coupon data — not needed |
 
 ### Schema Changes Needed
 
-**None.** All attributes already exist in existing tables.
+**None.** All attributes already exist in existing tables. `day_no`, `order_date`, `week_no`, `store_id` added to `orders` by Segment 6.
 
 ---
 
@@ -395,7 +437,6 @@ None needed. These are pre-computed features from the dataset, fed directly into
 | coupon_redempt.csv | household_key, DAY, COUPON_UPC, CAMPAIGN |
 | campaign_table.csv | DESCRIPTION, household_key, CAMPAIGN |
 | campaign_desc.csv | DESCRIPTION, CAMPAIGN, START_DAY, END_DAY |
-| holidays.csv | date, holiday |
 
 ### Raw Attributes Needed (12)
 
@@ -403,7 +444,8 @@ None needed. These are pre-computed features from the dataset, fed directly into
 |---|---|---|---|---|
 | household_key | customers | source_customer_id | ESSENTIAL | Customer identifier |
 | BASKET_ID | orders | source_order_id | ESSENTIAL | Order identifier |
-| DAY | orders | order_date | ESSENTIAL | When they bought |
+| DAY | orders | day_no | ESSENTIAL | Native study day (1-711) for interval math |
+| DAY | orders | order_date | ESSENTIAL | Synthetic date: anchor_date + (day_no - 1) |
 | PRODUCT_ID | products | source_product_id | ESSENTIAL | Which product |
 | WEEK_NO | orders | week_no | STRONG | Seasonal pattern |
 | DEPARTMENT | products | department | STRONG | Category seasonal analysis |
@@ -411,8 +453,9 @@ None needed. These are pre-computed features from the dataset, fed directly into
 | COMMODITY_DESC | products | commodity_desc | MODERATE | Product grouping |
 | display | causal_data | display | MODERATE | Promotion flag for seasonal response |
 | mailer | causal_data | mailer | MODERATE | Promotion flag for seasonal response |
-| date | holidays | date | STRONG | Holiday lookup |
-| holiday | holidays | holiday | STRONG | Holiday name |
+| STORE_ID | orders | store_id | MODERATE | Store identifier for causal_data join |
+
+**No `holidays` attributes.** This dataset provides no holiday calendar (see `Seasonal Purchase.md` — 8 files, no `holidays.csv`), so every attribute and feature for this segment comes from the source dataset itself. Recurring seasonality is derived from `WEEK_NO`, which the dataset does provide.
 
 ### Computed Features (stored in `customer_features`)
 
@@ -420,18 +463,20 @@ None needed. These are pre-computed features from the dataset, fed directly into
 |---|---|---|---|
 | purchase_by_week | `COUNT(*)` per customer per week | orders.week_no | SQL GROUP BY customer, week |
 | seasonal_concentration | `MAX(weekly_purchase_count) / AVG(weekly_purchase_count)` | orders.week_no | SQL per customer |
-| seasonal_category | `MODE(department WHERE week_no IN holiday_weeks)` | products.department, orders.week_no | SQL per customer |
-| days_until_holiday | `MIN(holiday_date) - CURRENT_DATE` | holidays.date | SQL per customer |
-| seasonal_purchase_ratio | `purchases in holiday weeks / total purchases` | orders.week_no | SQL per customer |
-| promo_response_rate | `purchases when display/mailer = 1 / total purchases` | causal_data.display, causal_data.mailer | SQL per customer |
+| seasonal_category | `MODE(department WHERE week_no IN customer's peak weeks)` | products.department, orders.week_no | SQL per customer |
+| seasonal_purchase_ratio | `purchases in customer's peak weeks / total purchases` | orders.week_no | SQL per customer |
+| promo_response_rate | `purchases when display/mailer=1 AND causal_data EXISTS / purchases where causal_data EXISTS` | causal_data.display, causal_data.mailer | SQL per customer (left join orders→causal_data on product_id, store_id, week_no) |
 
-### Removed Attributes
+**5 computed features.** `days_until_holiday` is not needed — it required a holiday calendar, which this dataset does not provide, and no native substitute exists. `seasonal_category` and `seasonal_purchase_ratio` are anchored on the customer's own **peak weeks** (their highest-purchase-count weeks, from `purchase_by_week`) rather than holiday weeks, which keeps the signal intact using only native attributes.
+
+**`causal_data` join key:** `causal_data` is keyed (`PRODUCT_ID`, `STORE_ID`, `WEEK_NO`). All three of its key columns are native source values, so it joins to `orders`/`products` on (`product_id`, `store_id` = STORE_ID, `week_no`) with no re-mapping.
+
+### Attributes Not Needed
 
 | Attribute | Reason |
 |---|---|
 | All demographics | Not included per user request |
 | QUANTITY, SALES_VALUE | Already covered in CLV (Segment 2) and Replenishment-Ready (Segment 6) |
-| STORE_ID | Not directly related to seasonal purchase |
 | TRANS_TIME | Time of day — not useful |
 | MANUFACTURER | Not needed |
 | SUB_COMMODITY_DESC | Too granular |
@@ -443,10 +488,10 @@ None needed. These are pre-computed features from the dataset, fed directly into
 
 | Table | Change |
 |---|---|
-| `causal_data` (new) | Add `display` (VARCHAR), `mailer` (VARCHAR) — promotion flags |
-| `holidays` (new) | Add `date` (DATE), `holiday` (VARCHAR) — holiday lookup |
+| `causal_data` (new) | `product_id` (FK → products.id), `store_id` (INT), `week_no` (INT), `display` (VARCHAR), `mailer` (VARCHAR) — product × store × week promotion flags |
+| `orders` | Add `store_id` (INT) — native STORE_ID for causal_data join (added in Segment 6) |
 
-**New tables needed:** `causal_data`, `holidays`
+**New tables needed:** `causal_data`
 
 ---
 
@@ -486,11 +531,13 @@ None needed. These are pre-computed features from the dataset, fed directly into
 |---|---|---|---|
 | cart_count | `COUNT(*) WHERE event_type='cart'` | events.event_type | SQL GROUP BY customer_id |
 | purchase_count | `COUNT(*) WHERE event_type='purchase'` | events.event_type | SQL GROUP BY customer_id |
-| cart_abandonment_rate | `1 - (purchase_count / cart_count)` | derived from purchase_count, cart_count | Division of two computed features |
+| cart_abandonment_rate | `(cart_count - purchase_count) / cart_count` | derived from purchase_count, cart_count | Division of computed features |
 | last_cart_days | `CURRENT_DATE - MAX(event_timestamp) WHERE event_type='cart'` | events.event_timestamp, events.event_type | SQL date diff, filter event_type |
 | session_count | `COUNT(DISTINCT session_id)` | events.session_id | SQL GROUP BY customer_id |
 | avg_cart_value | `AVG(price) WHERE event_type='cart'` | events.price, events.event_type | SQL AVG, filter event_type |
 | view_to_cart_rate | `cart_count / view_count` | derived from cart_count, view_count | Division of two computed features |
+| remove_from_cart_count | `COUNT(*) WHERE event_type='remove_from_cart'` | events.event_type | SQL GROUP BY customer_id |
+| remove_from_cart_rate | `remove_from_cart_count / cart_count` | derived from remove_from_cart_count, cart_count | Division of two computed features |
 
 ### Key Difference from Segment 1
 

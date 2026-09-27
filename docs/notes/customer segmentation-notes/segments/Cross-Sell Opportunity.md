@@ -6,6 +6,10 @@ Dunnhumby: The Complete Journey
 
 https://www.kaggle.com/datasets/frtgnn/dunnhumby-the-complete-journey
 
+## Description
+
+Household-level transactions over 2 years from 2,500 frequent shopper households. Contains all purchases, demographics, and direct marketing contact history. Ideal for studying direct marketing effects on customer engagement and spend.
+
 ## Files & Attributes
 
 transaction_data.csv

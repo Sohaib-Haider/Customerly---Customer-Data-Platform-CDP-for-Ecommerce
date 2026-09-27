@@ -1,6 +1,7 @@
 # CDP — Finalized Schema (Before Events)
 
-Status: Groups 1 & 2 finalized, Group 3 partially finalized (4 of 8 tables)
+Status: This file is under review, do not have comparison of this file with existing files for now
+There may have solid issued tat needs to be resolved
 Last Updated: 2026-09-27
 
 ---

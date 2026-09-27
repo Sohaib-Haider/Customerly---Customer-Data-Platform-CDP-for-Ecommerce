@@ -6,6 +6,10 @@ E-commerce multichannel direct messaging
 
 https://www.kaggle.com/datasets/mkechinov/direct-messaging
 
+## Description
+
+Multi-channel messages (email, web push, mobile push, SMS) from a medium-sized online store for 2 years. Campaign types: bulk, triggers, transactional. Data collected by REES46 CDP. Contains campaign metadata, message delivery statuses, and client first purchase dates.
+
 ## Files & Attributes
 
 campaigns.csv
