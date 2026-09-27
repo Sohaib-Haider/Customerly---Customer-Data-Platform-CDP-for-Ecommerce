@@ -28,10 +28,10 @@ kpi-schema-mapping.md
 │   └── Store KPIs (customer-facing — store owner dashboard)
 ├── KPI Categories
 │   ├── Platform Growth (5 cards)
-│   └── Revenue (17 cards)
+│   ├── Revenue (17 cards)
+│   ├── Customer (20 cards)
+│   └── Order (10 cards)
 ├── Future Categories (not yet added)
-│   ├── Customer
-│   ├── Order
 │   ├── Product
 │   ├── Marketing/Channel
 │   ├── Coupon
@@ -104,12 +104,62 @@ Revenue metrics for the store owner. These track how much money the store is mak
 
 ---
 
+### Category 3: Customer
+
+Customer metrics for the store owner. These track who the customers are, how engaged they are, and how much value they bring over time.
+
+| # | KPI Card | Description | Required Attributes |
+|---|----------|-------------|---------------------|
+| 1 | Total Customers | Total number of unique customers | `customers.source_customer_id` |
+| 2 | New Customers | Customers who made their first purchase in the period | `customers.first_purchase_date` |
+| 3 | Active Customers (30d) | Customers who ordered in the last 30 days | `customers.days_since_last_order` |
+| 4 | Customer Retention Rate | % of customers who kept buying vs. previous period | `customers.first_purchase_date`, `orders.order_date` |
+| 5 | Customer Churn Rate | % of customers who stopped buying | `customers.churn` |
+| 6 | Customer Lifetime Value (CLV) | ML-predicted future value of a customer | `customer_features.recency`, `frequency`, `monetary`, `avg_order_value`, `customer_tenure`, `total_items_bought`, `unique_products_bought`, `max_single_order_value`, `min_single_order_value`, `purchase_regularity` |
+| 7 | Repeat Purchase Rate | % of customers who bought more than once | `customer_features.frequency` |
+| 8 | Avg Days Between Purchases | Average gap between consecutive orders | `customer_features.purchase_regularity` |
+| 9 | Customer Satisfaction (CSAT) | Average satisfaction score (1-5) | `customers.satisfaction_score` |
+| 10 | Complaint Rate | % of customers who raised a complaint | `customers.complain` |
+| 11 | Average Tenure | Average days as a customer | `customers.tenure` |
+| 12 | Avg Days Since Last Order | Average recency across all customers | `customers.days_since_last_order` |
+| 13 | Average Cashback Amount | Average cashback earned per customer | `customers.cashback_amount` |
+| 14 | Churn Rate by Category | Churn rate broken down by preferred category | `customers.churn`, `customers.preferred_order_category` |
+| 15 | One-time Buyer Rate | % of customers who only bought once | `customer_features.frequency` |
+| 16 | High-Value Customer Rate | % of customers above a monetary threshold | `customer_features.monetary` |
+| 17 | Customer Growth Rate | Net customer growth vs. previous period | `customers.first_purchase_date` |
+| 18 | Avg Warehouse-to-Home Distance | Average delivery distance | `customers.warehouse_to_home` |
+| 19 | Avg Devices Registered | Average devices per customer | `customers.number_of_devices_registered` |
+| 20 | Time to First Purchase | Days from signup to first order | `customers.first_purchase_date` |
+
+**Audience:** Store owner (customer-facing)
+
+---
+
+### Category 4: Order
+
+Order metrics for the store owner. These track order volumes, conversion funnels, and fulfillment patterns.
+
+| # | KPI Card | Description | Required Attributes |
+|---|----------|-------------|---------------------|
+| 1 | Total Orders | Total number of unique orders placed | `orders.source_order_id` |
+| 2 | Orders per Customer | Average number of orders per customer | `orders.source_order_id`, `orders.customer_id` |
+| 3 | View to Cart Rate | % of product views that result in add-to-cart | `customer_features.view_count`, `customer_features.cart_count` |
+| 4 | Cart to Purchase Rate | % of add-to-cart events that result in purchase | `customer_features.purchase_count`, `customer_features.cart_count` |
+| 5 | Cart Abandonment Rate | % of carts that never convert to purchase | `customer_features.cart_count`, `customer_features.purchase_count`, `customer_features.remove_from_cart_count` |
+| 6 | Avg Items per Order | Average number of line items per order | `order_items.quantity`, `orders.source_order_id` |
+| 7 | Orders by Region | Order count broken down by geographic region | `orders.region` |
+| 8 | Order Growth Rate | Order growth % vs. previous period | `orders.order_date` |
+| 9 | Order Peak Hour | Hour of day with the most orders | `orders.order_timestamp` |
+| 10 | Session to Purchase Conversion | % of sessions that result in a purchase | `customer_features.purchase_count`, `customer_features.session_count` |
+
+**Audience:** Store owner (customer-facing)
+
+---
+
 ## Future Categories
 
 The following categories are planned but not yet added to this file. We will discuss and finalize each one before adding it:
 
-- Customer KPIs
-- Order KPIs
 - Product KPIs
 - Marketing/Channel KPIs
 - Coupon KPIs
@@ -126,3 +176,5 @@ The following categories are planned but not yet added to this file. We will dis
 | Date | Change |
 |------|--------|
 | 2026-09-27 | Initial draft — added Platform Growth and Revenue categories |
+| 2026-09-27 | Added Customer category (20 cards) |
+| 2026-09-27 | Added Order category (10 cards) |
