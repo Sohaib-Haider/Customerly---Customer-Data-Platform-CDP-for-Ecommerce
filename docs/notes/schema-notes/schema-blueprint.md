@@ -18,7 +18,7 @@ This file is a **design starting point**, not a final schema. Before designing a
    - [kpi-schema-mapping.md](../kpi-notes/kpi-schema-mapping.md)
 
 3. **This file** (schema design intent):
-   - schema-under-review.md
+   - schema-blueprint.md
 
 **Do not design tables without first understanding:**
 - What raw data is available (segment files)
