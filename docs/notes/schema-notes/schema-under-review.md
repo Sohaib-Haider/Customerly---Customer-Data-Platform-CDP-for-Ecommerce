@@ -1,187 +1,134 @@
-# CDP — Finalized Schema (Before Events)
+# CDP — Schema Design Review
 
-Status: This file is under review, do not have comparison of this file with existing files for now
-There may have solid issued tat needs to be resolved
-Last Updated: 2026-09-27
-
----
-
-## GROUP 1: PLATFORM CORE
-
-### `stores`
-Tenant accounts — the ecommerce stores that sign up to use the platform.
-
-| Column | Type | Description |
-|---|---|---|
-| id | UUID PK | Internal unique identifier |
-| name | VARCHAR(255) | Store name |
-| owner_name | VARCHAR(255) | Name of the store owner |
-| email | VARCHAR(255) UNIQUE | Login email |
-| password_hash | VARCHAR(255) | Hashed password |
-| phone | VARCHAR(50) | Contact phone number |
-| whatsapp | VARCHAR(50) | WhatsApp number |
-| plan | VARCHAR(50) | Subscription plan: free / pro / enterprise |
-| created_at | TIMESTAMP | When the store account was created |
-
-### `store_users`
-Team members who can login to a store (owner + staff).
-
-| Column | Type | Description |
-|---|---|---|
-| id | UUID PK | Internal unique identifier |
-| store_id | UUID FK → stores.id | Which store this user belongs to |
-| name | VARCHAR(255) | User's full name |
-| email | VARCHAR(255) | Login email |
-| password_hash | VARCHAR(255) | Hashed password |
-| role | VARCHAR(50) | Role: owner / admin / member |
-| created_at | TIMESTAMP | When the user was added |
+**Status:** Initial draft — for understanding only  
+**Last Updated:** 2026-09-27
 
 ---
 
-## GROUP 2: DATA INGESTION
+## START HERE — For Agents & Developers
 
-### `data_uploads`
-Tracks each file upload by a store.
+This file is a **design starting point**, not a final schema. Before designing any tables, you MUST read these files in order:
 
-| Column | Type | Description |
-|---|---|---|
-| id | UUID PK | Internal unique identifier |
-| store_id | UUID FK → stores.id | Which store uploaded the file |
-| file_name | VARCHAR(255) | Original filename |
-| file_type | VARCHAR(50) | File type: csv / postgres |
-| file_size | INTEGER | File size in bytes |
-| row_count | INTEGER | Number of rows in the file |
-| status | VARCHAR(50) | Upload status: pending / mapping / mapping_done / imported / error |
-| uploaded_by | UUID FK → store_users.id | Which user uploaded the file |
-| uploaded_at | TIMESTAMP | When the file was uploaded |
+1. **Segment files** (raw data context — understand what data exists):
+   - [segments-overview.md](../customer%20segmentation-notes/segments-overview.md)
+   - [segments-schema-mapping.md](../customer%20segmentation-notes/segments-schema-mapping.md)
+   - All 9 segment files in `../customer%20segmentation-notes/segments/`
 
-### `column_mappings`
-Stores the LLM mapping results — how source columns map to our canonical schema.
+2. **KPI definitions** (what metrics need to be served):
+   - [kpi-schema-mapping.md](../kpi-notes/kpi-schema-mapping.md)
 
-| Column | Type | Description |
-|---|---|---|
-| id | UUID PK | Internal unique identifier |
-| store_id | UUID FK → stores.id | Which store this mapping belongs to |
-| upload_id | UUID FK → data_uploads.id | Which upload this mapping is for |
-| source_column | VARCHAR(255) | Original column name from the store's data |
-| target_table | VARCHAR(255) | Our canonical table name |
-| target_column | VARCHAR(255) | Our canonical column name |
-| confidence | FLOAT | LLM mapping confidence score (0-1) |
+3. **This file** (schema design intent):
+   - schema-under-review.md
+
+**Do not design tables without first understanding:**
+- What raw data is available (segment files)
+- What KPIs need to be computed (KPI mapping)
+- How data maps to the canonical schema (segments-schema-mapping)
+
+**Note:** Data transformation decisions are pending and will be determined after the schema is finalized. This file provides the initial grouping and design principles only.
 
 ---
 
-## GROUP 3: CANONICAL CUSTOMER DATA
+## Purpose
 
-### Table 1: `customers`
-One row per customer. Only attributes that serve our 9 segments and KPI cards.
+This document provides the initial design intent for the CDP platform schema. It is meant to give future agents and developers a starting point for understanding how the schema should be organized before they begin designing tables.
 
-| Column | Type | Description |
-|---|---|---|
-| id | UUID PK | Internal unique identifier |
-| store_id | UUID FK → stores.id | Which store owns this customer (multi-tenant key) |
-| source | VARCHAR(50) | Which dataset/upload this customer came from |
-| source_customer_id | VARCHAR(255) | Original customer ID from the store's data |
-| tenure | INTEGER | How long they've been a customer (days) — Churn-Risk feature |
-| preferred_order_category | VARCHAR(100) | Their favorite product category — Churn-Risk feature |
-| satisfaction_score | INTEGER | Satisfaction rating 1-5 — Churn-Risk feature + KPI card |
-| complain | BOOLEAN | Has the customer complained — Churn-Risk feature + KPI card |
-| days_since_last_order | INTEGER | Days since the customer's last order — Churn-Risk feature + KPI card |
-| cashback_amount | DECIMAL(10,2) | Cashback earned — Churn-Risk feature |
-| churn | BOOLEAN | Churned (yes/no) — Churn-Risk label |
-| first_purchase_date | DATE | When the customer first purchased — Channel Preference + KPI card |
-
-### Table 2: `products`
-One row per product. Only attributes that serve our 9 segments and KPI cards.
-
-| Column | Type | Description |
-|---|---|---|
-| id | UUID PK | Internal unique identifier |
-| store_id | UUID FK → stores.id | Which store owns this product (multi-tenant key) |
-| source | VARCHAR(50) | Which dataset/upload this product came from |
-| source_product_id | VARCHAR(255) | Original product ID from the store's data |
-| name | VARCHAR(255) | Product name — Cross-Sell, KPIs |
-| brand | VARCHAR(255) | Product brand — Purchase Intent, Cross-Sell |
-| category | VARCHAR(100) | Product category — Cross-Sell, KPIs |
-| department | VARCHAR(50) | Department (e.g. Dairy, Bakery) — Cross-Sell, Seasonal |
-| commodity_desc | VARCHAR(255) | Product commodity description — Cross-Sell |
-| unit_price | DECIMAL(10,2) | Product unit price — KPIs, CLV |
-
-### Table 3: `orders`
-One row per order (the receipt). Order-level info only, no financials.
-
-| Column | Type | Description |
-|---|---|---|
-| id | UUID PK | Internal unique identifier |
-| store_id | UUID FK → stores.id | Which store owns this order (multi-tenant key) |
-| source | VARCHAR(50) | Which dataset/upload this order came from |
-| source_order_id | VARCHAR(255) | Original order ID from the store's data |
-| customer_id | UUID FK → customers.id | Which customer placed this order |
-| order_date | DATE | Date of the order — CLV, Replenishment, Seasonal, KPIs |
-| order_timestamp | TIMESTAMP | Exact timestamp of the order — Purchase Intent, Cart Abandoners |
-| region | VARCHAR(50) | Store region — Geo KPIs |
-| department | VARCHAR(50) | Department — Cross-Sell, Seasonal |
-
-### Table 4: `order_items`
-One row per product within an order (each line on the receipt). All financials live here.
-
-| Column | Type | Description |
-|---|---|---|
-| id | UUID PK | Internal unique identifier |
-| store_id | UUID FK → stores.id | Which store owns this order item (multi-tenant key) |
-| source | VARCHAR(50) | Which dataset/upload this order item came from |
-| order_id | UUID FK → orders.id | Which order this item belongs to |
-| product_id | UUID FK → products.id | Which product this item is |
-| quantity | INTEGER | Quantity of this product — CLV, KPIs |
-| unit_price | DECIMAL(10,2) | Price per unit of this product — KPIs |
-| selling_price | DECIMAL(10,2) | Selling price — CLV, KPIs |
-| sales_value | DECIMAL(10,2) | Total value (quantity x unit_price) — Replenishment, Cross-Sell |
-| retail_disc | DECIMAL(10,2) | Retail discount amount — Discount Responsive, KPIs |
-| coupon_disc | DECIMAL(10,2) | Coupon discount amount — Discount Responsive, KPIs |
-| coupon_match_disc | DECIMAL(10,2) | Coupon match discount amount — Discount Responsive, KPIs |
-| other_discount | DECIMAL(10,2) | Other discount amount — Discount Responsive, KPIs |
-| total_discount | DECIMAL(10,2) | **Computed:** Sum of all discounts — KPIs |
-| net_amount | DECIMAL(10,2) | **Computed:** sales_value minus total_discount — CLV, KPIs |
-
-**Computed Column Formulas:**
-
-- `total_discount` = `retail_disc` + `coupon_disc` + `coupon_match_disc` + `other_discount`
-- `net_amount` = `sales_value` - `total_discount`
+The schema is a **multi-tenant, canonical data model** where:
+- E-commerce stores upload their data
+- The platform normalizes it into a shared schema
+- ML-powered customer segments and KPI dashboards are served back to store owners
 
 ---
 
-## REMAINING TABLES (Not Yet Defined)
+## File Map
 
-### Group 3 (4 tables remaining):
-- `events`
-- `sessions`
-- `coupon_campaigns`
-- `coupon_redemptions`
+> **Note:** This file map is an initial draft based on current understanding. It may be incomplete or subject to change after reviewing the files listed in START HERE.
 
-### Group 4: Features & Messaging (4 tables):
-- `customer_features`
-- `marketing_campaigns`
-- `message_sends`
-- `holidays`
-
-### Group 5: Segmentation (2 tables):
-- `segments`
-- `customer_segments`
-
-### Group 6: Analytics (2 tables):
-- `customer_kpis`
-- `store_kpis`
-
-### Group 7: Campaign Management (3 tables):
-- `campaigns`
-- `workflows`
-- `workflow_nodes`
+```
+schema-under-review.md
+├── START HERE
+├── Purpose
+├── File Map (this section)
+├── Design Overview (initial draft)
+│   ├── Group 1: Platform Core
+│   ├── Group 2: Data Ingestion
+│   ├── Group 3: Canonical Customer Data
+│   ├── Group 4: Features & Messaging
+│   ├── Group 5: Segmentation
+│   ├── Group 6: Analytics
+│   └── Group 7: Campaign Management
+├── Design Principles
+└── Changelog
+```
 
 ---
 
-## DESIGN PRINCIPLES
+## Design Overview
 
-1. **Multi-tenancy:** Shared database, shared tables, `store_id` on every tenant-owned row
-2. **No redundant columns:** Each attribute serves at least one segment or KPI card
-3. **Computed columns:** Calculated by the platform, not from customer uploaded data
-4. **Traceability:** `source` and `source_*_id` columns track where data came from
-5. **One canonical schema:** Data from any store maps to the same tables
+> **Note:** This design overview is an initial draft. It may be incomplete or subject to change after reviewing the files listed in START HERE. The groups below represent the current understanding of how the schema should be organized. Final group definitions, table structures, and relationships will be determined after reviewing the source data and KPI requirements.
+
+### Group 1: Platform Core
+
+Tenant accounts and team members. Handles authentication, authorization, and multi-tenant isolation. Every other group references this group to determine which store owns the data.
+
+### Group 2: Data Ingestion
+
+File upload tracking and LLM-powered column mapping. Tracks what was uploaded, by whom, and how source columns map to the canonical schema. Provides traceability back to original source data.
+
+### Group 3: Canonical Customer Data
+
+The heart of the schema. Stores normalized customer, product, order, and order item data. All financials live at the order item level. This group serves as the single source of truth for all business data.
+
+### Group 4: Features & Messaging
+
+Computed ML features, marketing campaigns, message delivery tracking, and holiday calendars. Powers segmentation, channel preference, and marketing analytics.
+
+### Group 5: Segmentation
+
+Segment definitions and customer-to-segment assignments. Stores which customers belong to which segments and their ML scores. Enables targeted marketing and personalized experiences.
+
+### Group 6: Analytics
+
+Pre-computed KPI tables. Populated by scheduled jobs to make dashboard queries fast. Serves both platform-level and store-level metrics.
+
+### Group 7: Campaign Management
+
+Campaigns, workflows, and workflow nodes. Manages marketing campaign execution, automation, and orchestration across multiple channels.
+
+---
+
+## Design Principles
+
+These principles govern all schema decisions:
+
+1. **Multi-tenancy:** Shared database, shared tables, `store_id` on every tenant-owned row. No separate databases per store.
+
+2. **No redundant columns:** Each column must serve at least one segment or KPI card. If it doesn't, it doesn't exist.
+
+3. **Computed columns are platform-owned:** Calculated fields (totals, net amounts, rates) are computed by the platform, never uploaded by the store.
+
+4. **Traceability:** Source columns and original IDs track where data came from, enabling audit and debugging.
+
+5. **One canonical schema:** Data from any store maps to the same tables. No per-store customization or extensions.
+
+---
+
+## What's NOT in this file
+
+This file intentionally does **not** contain:
+- Table names
+- Column definitions
+- SQL
+- Data types
+- Constraints
+- Data transformation decisions (pending schema finalization)
+
+These will be defined in a separate schema definition document after the design is finalized based on the source data and KPI requirements.
+
+---
+
+## Changelog
+
+| Date | Change |
+|------|--------|
+| 2026-09-27 | Initial draft — created for understanding and schema design starting point |
