@@ -88,7 +88,7 @@ Most CDPs are built for enterprises juggling hundreds of integrations. **Our pla
 
 ## How It Works
 ```
-Store connects data (CSV)
+Store connects data (CSV / PostGres)
 ↓
 LLM maps columns → platform schema
 ↓
