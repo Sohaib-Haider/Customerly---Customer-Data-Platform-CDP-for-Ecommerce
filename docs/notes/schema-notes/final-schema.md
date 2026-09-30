@@ -1,13 +1,35 @@
 # CDP — Final Canonical Database Schema
 
-**Status:** Proposed final schema — awaiting sign-off on 16 Open Decisions before SQL generation
-**Last Updated:** 2026-09-28
-**Source documents (authoritative):** schema-blueprint.md, segments-schema-mapping.md, segments-overview.md, the 9 files in `segments/`, kpi-schema-mapping.md, `docs/Overview.md`
+**Status:** Proposed final schema — 23 tables; awaiting sign-off on the remaining Open Decisions
+**Last Updated:** 2026-09-30
+**Source documents (authoritative):** schema-blueprint.md, segments-schema-mapping.md, segments-overview.md, the 9 files in `segments/`, kpi-schema-mapping.md, `docs/Overview.md`, `docs/decisions/final-schema-gaps.md`
 
 > **Scope of authority used in this document**
 > - `kpi-schema-mapping.md` is treated as a **fixed requirements contract**. A column referenced by any KPI card is never removed, renamed or re-typed on judgement alone, even where the schema has a better alternative. Conflicts are recorded in Open Decisions instead.
+> - `docs/decisions/final-schema-gaps.md` is the **source of truth for the platform-operations gaps** it enumerates. Applied decisions are annotated "Applied from" at each affected table.
 > - `docs/decisions/data-transformation-plan.md` is **excluded**: it is marked *"Pending (Strictly Do not consider this file's context anywhere for now)"*. No column, provenance marker, type or constraint in this document is based on it.
 > - Where the valid documentation contradicts itself, both readings are cited and the item is marked **Decision Required** rather than resolved by guessing.
+>
+> **Revision note (2026-09-30):** tables `ml_models`, `kpi_definitions`, `workflows` and `workflow_executions`, plus the `message_sends.workflow_execution_id` column, were added from `final-schema-gaps.md`; `segments.required_fields` was added. Where the gap file was incomplete, the minimal non-inventing completion was applied and flagged inline as a Decision Required rather than guessed silently. **None of the pre-existing Open Decisions #1–#16 were resolved by the gap file** — it only adds scope.
+>
+> **Two gap-file items subsequently closed by decision (2026-09-30):**
+> - The `roles` table proposed by gap item 1 was **removed** — it is not needed. `store_users.role` remains as the single source of the role vocabulary, holding the fixed 3-value set (`owner`, `admin`, `member`) defined by `kpi-schema-mapping.md` card 5. No permissions table exists; role permissions are application logic, not data.
+> - A separate `segment_definitions` table (gap item 3) was **not created**. The existing `segments` table covers the requirement and holds `required_fields`. This closes the former Decision #20.
+>
+> Decisions **#17, #18 and #19 are retired** (they existed only for `roles`); **#20 is resolved**. Their numbers are deliberately not reused.
+>
+> **Gap-file item renumbering (2026-09-30) — citation key:** the gap file removed its former items 1 (`roles`) and 3 (`segment_definitions`) and **renumbered its remaining items to 1–6**. Every "Applied from" citation in this document now uses the **current** numbering. Any citation to a former item 1 or 3 is explicitly labelled *former item*.
+>
+> | Current gap item | Subject | Where applied in this document |
+> |---|---|---|
+> | 1 | `ml_models` table | §12 `ml_models` |
+> | 2 | `kpi_definitions` table | §22 `kpi_definitions` |
+> | 3 | `workflows` table | §18 `workflows` |
+> | 4 | `workflow_executions` table | §19 `workflow_executions` |
+> | 5 | `message_sends.workflow_execution_id` FK | §15 `message_sends` |
+> | 6 | `customer_features` refresh on new data | §10 `customer_features`, Open Decision #13 |
+>
+> No other gap items exist. Nothing in this schema is derived from any other decision file.
 
 ---
 
@@ -47,16 +69,22 @@ This document defines the canonical PostgreSQL schema for the multi-tenant e-com
 9. [events](#9-events)
 10. [customer_features](#10-customer_features)
 11. [segments](#11-segments)
-12. [customer_segments](#12-customer_segments)
-13. [marketing_campaigns](#13-marketing_campaigns)
-14. [message_sends](#14-message_sends)
-15. [coupon_campaigns](#15-coupon_campaigns)
-16. [coupon_redemptions](#16-coupon_redemptions)
-17. [holidays](#17-holidays)
-18. [causal_data](#18-causal_data)
-19. [kpi_snapshots](#19-kpi_snapshots)
-20. [KPI Coverage](#kpi-coverage)
-21. [Open Decisions](#open-decisions)
+12. [ml_models](#12-ml_models)
+13. [customer_segments](#13-customer_segments)
+14. [marketing_campaigns](#14-marketing_campaigns)
+15. [message_sends](#15-message_sends)
+16. [coupon_campaigns](#16-coupon_campaigns)
+17. [coupon_redemptions](#17-coupon_redemptions)
+18. [workflows](#18-workflows)
+19. [workflow_executions](#19-workflow_executions)
+20. [holidays](#20-holidays)
+21. [causal_data](#21-causal_data)
+22. [kpi_definitions](#22-kpi_definitions)
+23. [kpi_snapshots](#23-kpi_snapshots)
+24. [KPI Coverage](#kpi-coverage)
+25. [Open Decisions](#open-decisions)
+26. [Decisions Arising From `final-schema-gaps.md`](#26-decisions-arising-from-final-schema-gaps)
+27. [Changelog](#changelog)
 
 ---
 
@@ -105,6 +133,10 @@ This document defines the canonical PostgreSQL schema for the multi-tenant e-com
 **Indexes:**
 - `idx_store_users_store_id` on `(store_id)`
 - `idx_store_users_role` on `(role)` — for "Users by Role" KPI
+
+> **Note on the `role` column:** `role` is a fixed 3-value vocabulary — `owner`, `admin`, `member` — as defined by `kpi-schema-mapping.md` card 5 (*"Distribution of users by role (owner / admin / member)"*). These are **platform-level roles, not per-store custom roles**.
+>
+> A separate `roles` / permissions table was proposed by `final-schema-gaps.md` **former item 1** and then **removed by decision (2026-09-30)** as not needed; the gap file has since deleted that item and renumbered its remaining items to 1–6, so `roles` is no longer a numbered gap item at all. Role permissions are application logic, not data, so no table stores them and no FK constrains this column. The vocabulary above is the only definition.
 
 ---
 
@@ -435,6 +467,10 @@ This document defines the canonical PostgreSQL schema for the multi-tenant e-com
 
 > **Design note:** This is a wide table (one row per customer). All features are computed by the platform via scheduled jobs. The `purchase_by_week` column uses JSONB for flexibility. kpi-schema-mapping.md requires these metrics to *"calculate dynamically or refresh on a rolling 7-day schedule"*; the refresh mechanism (full vs. incremental) is not specified in the valid documentation — see Open Decisions #13.
 >
+> **Applied from:** `final-schema-gaps.md` **item 6** (`customer_features` refresh on new data), which confirms that recomputation **must** happen when new platform-generated rows arrive in `orders`, `order_items`, `message_sends` or `events` — otherwise `customer_features` and `kpi_snapshots` reflect only uploaded historical data, never live activity. That requirement is now confirmed rather than optional.
+>
+> **No trigger is defined in this document.** The gap file offers "a trigger or scheduled job", which is a runtime mechanism, not a table, column or constraint. It also does not choose between the two. A row-level database trigger would be the wrong mechanism here, since a single insert into `events` would have to recompute 55 feature columns across the affected customers inside the transaction. A scheduled job or queue is the appropriate mechanism. **The requirement is recorded; the mechanism remains Open Decision #13.**
+>
 > **Grain conflict — Decision Required (#14):** this table has one row per customer, but segments-schema-mapping.md Segment 6 defines three features at a **customer × product** grain, not per customer:
 > - `days_since_last_purchase` — *"SQL per customer+product"*
 > - `purchase_frequency` — *"SQL per customer+product"*
@@ -464,6 +500,7 @@ This document defines the canonical PostgreSQL schema for the multi-tenant e-com
 | `name` | `VARCHAR(100)` | NOT NULL | [P] | Segment name (e.g., "Predicted Purchase Intent") |
 | `description` | `TEXT` | NULL | [P] | Human-readable description |
 | `segment_type` | `VARCHAR(50)` | NOT NULL | [P] | `ml` or `rule` |
+| `required_fields` | `JSONB` | NULL | [P] | Fields a store's ingested data must contain for this segment to be available |
 | `created_at` | `TIMESTAMPTZ` | NOT NULL | [P] | Creation timestamp |
 
 **Primary Key:** `id`
@@ -474,10 +511,56 @@ This document defines the canonical PostgreSQL schema for the multi-tenant e-com
 **Indexes:** None beyond PK
 
 > **Note:** Segments are platform-defined, not store-specific. All stores share the same 9 segments.
+>
+> **Applied from:** `final-schema-gaps.md` **former item 3** (`segment_definitions` table), which proposed a table holding `name`, `segment_type`, `required_fields`, `description`. The gap file has since **deleted that item** as already covered, and renumbered its remaining items to 1–6, so it is no longer a numbered gap item.
+>
+> **Resolved (2026-09-30):** a separate `segment_definitions` table was **not** created, by decision. This table already covers the requirement — it holds `name`, `segment_type`, `description` and `required_fields`, the four attributes former item 3 asked for. `required_fields` is the only attribute that did not already exist and was added here.
+>
+> This satisfies the intent behind former item 3: `Overview.md` line 56 requires segments to be *"config-driven, not hardcoded"*, and `required_fields` JSONB stores that configuration as data rather than in code.
+>
+> The former Decision #20 is **closed**. There is no second segment-definition table and no ambiguity about which table owns segment identity — this one does, and `customer_segments.segment_id` and `ml_models.segment_id` both reference `segments.id`.
 
 ---
 
-## 12. customer_segments
+## 12. ml_models
+
+**Purpose:** Version history for trained ML models, so it is recorded which model version is live for each segment. Added per `final-schema-gaps.md` **item 1**.
+
+| Column | Type | Nullable | Provenance | Description |
+|--------|------|----------|------------|-------------|
+| `segment_id` | `UUID` | NOT NULL | [P] | FK → segments.id |
+| `version` | `VARCHAR(50)` | NOT NULL | [P] | Model version (e.g. "v1.0", "v2.0") |
+| `model_path` | `VARCHAR(500)` | NOT NULL | [P] | Where the model file is stored |
+| `trained_at` | `TIMESTAMPTZ` | NOT NULL | [P] | When this model was trained |
+| `metrics` | `JSONB` | NULL | [P] | Performance scores, e.g. `{"accuracy": 0.92}` |
+| `is_active` | `BOOLEAN` | NOT NULL DEFAULT false | [P] | Whether this is the currently used model |
+
+**Primary Key:** `(segment_id, version)`
+
+**Foreign Keys:**
+- `segment_id` → `segments.id` ON DELETE CASCADE
+
+**Unique Constraints:**
+- covered by the primary key
+
+**Indexes:**
+- `idx_ml_models_segment_id` on `(segment_id)`
+- `idx_ml_models_is_active` on `(is_active)` — for resolving the live model per segment
+- `idx_ml_models_trained_at` on `(trained_at)` — for recency checks
+
+> **Applied from:** `final-schema-gaps.md` **item 1**, which specifies `segment_id`, `version`, `model_path`, `trained_at`, `metrics`, `is_active`. All six are present below with exactly those names, types and meanings; no column was added, renamed or re-typed.
+>
+> **⚠ Assumption applied — Decision Required (#21):** the gap file lists no primary key, so `(segment_id, version)` was used — the only option that invents no additional column. Confirm.
+>
+> **⚠ No `store_id` — intentional:** the gap file does not list `store_id`, so none was added. Models are trained offline per segment and are platform-wide, consistent with `Overview.md` line 34 (*"`ml_models/` — trained model artifacts (copied from `data_prep/training`)"*) and with `segments` being platform-level.
+>
+> **⚠ At most one active model per segment is not enforced — Decision Required (#22):** `is_active` implies exactly one live model per segment, but nothing in the gap file asks for that constraint and none was added. Enforcing it requires a partial unique index (`UNIQUE (segment_id) WHERE is_active`), which is a business rule this document does not invent. Confirm whether it should exist.
+>
+> **Potential home for Open Decision #1:** this table is the natural place to record which features a model was trained on, which is exactly what the Churn-Risk leakage guard needs. `final-schema-gaps.md` does not specify such a column, so none was added — noted only as an option, not a proposal.
+
+---
+
+## 13. customer_segments
 
 **Purpose:** Customer-to-segment assignments with ML scores. Powers segment distribution KPIs and targeted marketing.
 
@@ -510,7 +593,7 @@ This document defines the canonical PostgreSQL schema for the multi-tenant e-com
 
 ---
 
-## 13. marketing_campaigns
+## 14. marketing_campaigns
 
 **Purpose:** Marketing campaign definitions. Referenced by message_sends for attribution.
 
@@ -542,7 +625,7 @@ This document defines the canonical PostgreSQL schema for the multi-tenant e-com
 
 ---
 
-## 14. message_sends
+## 15. message_sends
 
 **Purpose:** Individual message delivery and engagement tracking. Powers all marketing/channel KPIs.
 
@@ -566,6 +649,7 @@ This document defines the canonical PostgreSQL schema for the multi-tenant e-com
 | `is_blocked` | `BOOLEAN` | NOT NULL DEFAULT false | [S] | Message blocked |
 | `is_purchased` | `BOOLEAN` | NOT NULL DEFAULT false | [S] | Purchase attributed to this message |
 | `purchased_at` | `TIMESTAMPTZ` | NULL | [S] | When the attributed purchase occurred |
+| `workflow_execution_id` | `UUID` | NULL | [P] | FK → workflow_executions.id. NULL for historically ingested messages |
 | `created_at` | `TIMESTAMPTZ` | NOT NULL | [P] | Record creation timestamp |
 
 **Primary Key:** `id`
@@ -574,6 +658,7 @@ This document defines the canonical PostgreSQL schema for the multi-tenant e-com
 - `store_id` → `stores.id` ON DELETE CASCADE
 - `campaign_id` → `marketing_campaigns.id` ON DELETE CASCADE
 - `customer_id` → `customers.id` ON DELETE CASCADE
+- `workflow_execution_id` → `workflow_executions.id` ON DELETE SET NULL
 
 **Unique Constraints:**
 - `(store_id, source_message_id)` — one message per source ID per store
@@ -588,7 +673,14 @@ This document defines the canonical PostgreSQL schema for the multi-tenant e-com
 - `idx_message_sends_is_opened` on `(is_opened)` — for open rate KPIs
 - `idx_message_sends_is_clicked` on `(is_clicked)` — for CTR KPIs
 - `idx_message_sends_is_purchased` on `(is_purchased)` — for conversion KPIs
+- `idx_message_sends_workflow_execution_id` on `(workflow_execution_id)` — for workflow attribution
 
+> **Applied from:** `final-schema-gaps.md` **item 5** — a nullable `workflow_execution_id` FK to `workflow_executions` so message engagement can be attributed to the workflow execution that caused it. Implemented exactly as written: column name `workflow_execution_id`, type `UUID`, nullable, FK to `workflow_executions.id`.
+>
+> **⚠ ON DELETE behaviour not specified — Decision Required (#23):** the gap file states the column and that it is nullable, but does not say what happens to the message when its workflow execution is deleted. `ON DELETE SET NULL` was chosen because it preserves message rows and their engagement data, consistent with the nullable-by-design intent. `ON DELETE CASCADE` (delete the message as well) is the alternative. Confirm.
+>
+> **⚠ New cross-table dependency:** this FK now points at `workflow_executions` (table 19), which must be created **before** `message_sends` in any DDL, or the constraint added afterwards with `ALTER TABLE`.
+>
 > **Channel normalization:** `web_push` and `mobile_push` are normalized to `push` in `channel_norm`, per the mapping table in segments-schema-mapping.md Segment 5.
 >
 > **Gap — Decision Required (#6):** that mapping table defines only `email`, `sms`, `web_push` and `mobile_push`. It has **no row for `whatsapp`**, yet WhatsApp is a first-class channel elsewhere in the valid documentation (kpi-schema-mapping.md lists it in 4 Channel Preference cards and segments-overview.md names it repeatedly). `channel_norm` and `marketing_campaigns.channel` therefore need a defined value set that includes `whatsapp`. Not guessed here.
@@ -597,7 +689,7 @@ This document defines the canonical PostgreSQL schema for the multi-tenant e-com
 
 ---
 
-## 15. coupon_campaigns
+## 16. coupon_campaigns
 
 **Purpose:** Coupon campaign definitions. Referenced by coupon_redemptions.
 
@@ -625,7 +717,7 @@ This document defines the canonical PostgreSQL schema for the multi-tenant e-com
 
 ---
 
-## 16. coupon_redemptions
+## 17. coupon_redemptions
 
 **Purpose:** Individual coupon redemption records. Powers coupon KPIs and discount responsiveness segment.
 
@@ -657,7 +749,90 @@ This document defines the canonical PostgreSQL schema for the multi-tenant e-com
 
 ---
 
-## 17. holidays
+## 18. workflows
+
+**Purpose:** Stores drag-and-drop workflow definitions created through the campaign builder. Added per `final-schema-gaps.md` **item 3**.
+
+| Column | Type | Nullable | Provenance | Description |
+|--------|------|----------|------------|-------------|
+| `id` | `UUID` | NOT NULL | [P] | Platform-generated workflow ID (PK) |
+| `store_id` | `UUID` | NOT NULL | [P] | FK → stores.id |
+| `name` | `VARCHAR(255)` | NOT NULL | [S] | Workflow name (e.g. "Abandoned Cart Recovery") |
+| `status` | `VARCHAR(50)` | NOT NULL | [P] | `draft`, `active`, or `paused` |
+| `nodes` | `JSONB` | NULL | [S] | Array of node objects, e.g. `[{"id": "node_1", "type": "send_message", "config": {"message": "Hello"}, "position": 1}, ...]` |
+| `connections` | `JSONB` | NULL | [S] | Node connection mapping, e.g. `{"node_1": {"next": "node_2"}}` |
+| `campaign_id` | `UUID` | NULL | [P] | FK → marketing_campaigns.id |
+| `created_at` | `TIMESTAMPTZ` | NOT NULL | [P] | When this workflow was created |
+| `updated_at` | `TIMESTAMPTZ` | NOT NULL | [P] | When this workflow was last modified |
+
+**Primary Key:** `id`
+
+**Foreign Keys:**
+- `store_id` → `stores.id` ON DELETE CASCADE
+- `campaign_id` → `marketing_campaigns.id` ON DELETE SET NULL
+
+**Unique Constraints:** None specified by `final-schema-gaps.md`
+
+**Indexes:**
+- `idx_workflows_store_id` on `(store_id)`
+- `idx_workflows_campaign_id` on `(campaign_id)`
+- `idx_workflows_status` on `(status)`
+
+> **Applied from:** `final-schema-gaps.md` **item 3**, including the n8n-style decision to store nodes and connections as JSONB rather than in a separate `workflow_nodes` table. All eight specified columns are present below with the specified names and types; the only added column is the surrogate `id` (Decision #24).
+>
+> **⚠ `id` added — Decision Required (#24):** the gap file lists no primary key, but `workflow_executions.workflow_id` is specified as a UUID FK to this table, so a stable key is required. A surrogate `id UUID` was added — this is the one column here that is **not** in the gap file. Confirm.
+>
+> **⚠ `campaign_id` made NULLABLE — Decision Required (#25):** the gap file does not state nullability. A workflow with `status = 'draft'` may legitimately have no campaign yet, and `ON DELETE NOT NULL` would make that impossible. NULL was chosen. Confirm, or instruct `NOT NULL`.
+>
+> **⚠ ON DELETE behaviour not specified — Decision Required (#26):** `ON DELETE SET NULL` was chosen for `campaign_id` so a workflow survives deletion of its campaign. `ON DELETE CASCADE` is the alternative. Confirm.
+>
+> **Note:** `schema-blueprint.md` Group 7 describes *"Campaigns, workflows, and workflow nodes"* as separate concepts. This schema stores workflow nodes inside `nodes` JSONB, which is the gap file's explicit decision, so the blueprint's literal wording is not reproduced as separate tables.
+
+---
+
+## 19. workflow_executions
+
+**Purpose:** Tracks which customer is at which step of a running workflow. Added per `final-schema-gaps.md` **item 4**.
+
+| Column | Type | Nullable | Provenance | Description |
+|--------|------|----------|------------|-------------|
+| `id` | `UUID` | NOT NULL | [P] | Platform-generated execution ID (PK) |
+| `workflow_id` | `UUID` | NOT NULL | [P] | FK → workflows.id |
+| `customer_id` | `UUID` | NOT NULL | [P] | FK → customers.id |
+| `segment_id` | `UUID` | NULL | [P] | FK → customer_segments.id — the segment that triggered this execution |
+| `current_node_index` | `INTEGER` | NULL | [C] | Index into the `nodes` JSONB array |
+| `status` | `VARCHAR(50)` | NOT NULL | [P] | `waiting`, `completed`, or `exited` |
+| `started_at` | `TIMESTAMPTZ` | NOT NULL | [P] | When the customer entered this workflow |
+| `completed_at` | `TIMESTAMPTZ` | NULL | [P] | When the customer finished this workflow |
+
+**Primary Key:** `id`
+
+**Foreign Keys:**
+- `workflow_id` → `workflows.id` ON DELETE CASCADE
+- `customer_id` → `customers.id` ON DELETE CASCADE
+- `segment_id` → `customer_segments.id` ON DELETE SET NULL
+
+**Unique Constraints:** None specified by `final-schema-gaps.md`
+
+**Indexes:**
+- `idx_workflow_executions_workflow_id` on `(workflow_id)`
+- `idx_workflow_executions_customer_id` on `(customer_id)`
+- `idx_workflow_executions_segment_id` on `(segment_id)`
+- `idx_workflow_executions_status` on `(status)` — for finding customers waiting on a step
+
+> **Applied from:** `final-schema-gaps.md` **item 4**. All eight specified columns are present below with the specified names and types; the only added column is the surrogate `id` (Decision #27).
+>
+> **⚠ `id` added — Decision Required (#27):** the gap file lists no primary key, but `message_sends.workflow_execution_id` is specified as a UUID FK to this table, so a stable key is required. A surrogate `id UUID` was added. The alternative — a composite key `(workflow_id, customer_id)` — would forbid the same customer re-entering the same workflow more than once, which a retry or re-enrolment flow would need. Confirm.
+>
+> **⚠ `segment_id` is nullable — Decision Required (#28):** the gap file says the segment triggered the execution but also that a workflow can be launched from a *"segment (or custom filter)"* (`Overview.md` line 83). A custom-filter launch has no segment, so NULL is required for that case. Confirm.
+>
+> **⚠ No `store_id` — Decision Required (#29):** the gap file does not list `store_id`, so none was added. This is a tenant-owned table, which `schema-blueprint.md` principle 1 says should carry `store_id` on every tenant-owned row. Tenancy is currently derivable only by joining through `workflows`. `store_users` and `order_items` are in the same position. Confirm whether to add `store_id` here for direct tenant filtering.
+>
+> **⚠ Nullability of `current_node_index` and `completed_at`:** set NULL because both are naturally absent mid-run (a `waiting` execution has no current node and no completion time). The gap file does not specify either.
+
+---
+
+## 20. holidays
 
 **Purpose:** Holiday calendar for seasonal analysis and send-time optimization.
 
@@ -683,7 +858,7 @@ This document defines the canonical PostgreSQL schema for the multi-tenant e-com
 
 ---
 
-## 18. causal_data
+## 21. causal_data
 
 **Purpose:** Product × store × week promotion flags from Dunnhumby. Used for seasonal purchase segment's promo response features.
 
@@ -718,7 +893,41 @@ This document defines the canonical PostgreSQL schema for the multi-tenant e-com
 
 ---
 
-## 19. kpi_snapshots
+## 22. kpi_definitions
+
+**Purpose:** Stores the metadata for all 115 KPI cards, so KPIs are data in the database rather than only a documentation file. Added per `final-schema-gaps.md` **item 2**.
+
+| Column | Type | Nullable | Provenance | Description |
+|--------|------|----------|------------|-------------|
+| `name` | `VARCHAR(100)` | NOT NULL | [P] | KPI identifier (e.g. "gross_revenue") — PK |
+| `category` | `VARCHAR(50)` | NOT NULL | [P] | Which category (e.g. "revenue", "customer") |
+| `formula` | `TEXT` | NULL | [P] | How to calculate this KPI |
+| `refresh_schedule` | `VARCHAR(20)` | NULL | [P] | How often to recalculate (e.g. "daily", "weekly") |
+| `description` | `TEXT` | NULL | [P] | What this KPI measures |
+
+**Primary Key:** `name`
+
+**Foreign Keys:** None — this is a platform-level reference table
+
+**Unique Constraints:**
+- covered by the primary key
+
+**Indexes:**
+- `idx_kpi_definitions_category` on `(category)`
+
+> **Applied from:** `final-schema-gaps.md` **item 2**. All five specified columns are present below with the specified names and types; no column was added, renamed or re-typed.
+>
+> **⚠ No surrogate `id` added:** unlike `workflows` and `workflow_executions`, nothing in the gap file requires a UUID reference to this table, so `name` was used as the primary key — the only option that invents no column. `kpi_snapshots.kpi_name` is **not** wired to this table as a foreign key, because `final-schema-gaps.md` does not ask for it. Confirm whether that relationship should exist.
+>
+> **`formula` starts NULL by design:** `kpi-schema-mapping.md` line 16 states the documentation *"does not yet define formulas, SQL, or target table schemas."* Formulas are therefore genuinely undefined in the valid project documentation and must not be invented. Populate once they are written.
+>
+> **No `store_id`:** KPIs are platform-defined. The gap file does not list `store_id`, and the 115 cards in `kpi-schema-mapping.md` are not per-store.
+>
+> **This table adds no KPI cards.** It is metadata storage for the 115 cards already defined; see the KPI Coverage section.
+
+---
+
+## 23. kpi_snapshots
 
 **Purpose:** Pre-computed KPI values for fast dashboard loading. Populated by scheduled jobs.
 
@@ -768,18 +977,25 @@ stores (1) ──< customers (1) ──< events
 stores (1) ──< customers (1) ──< customer_features
 stores (1) ──< customers (1) ──< customer_segments
 stores (1) ──< segments (1) ──< customer_segments
+stores (1) ──< segments (1) ──< ml_models
 stores (1) ──< marketing_campaigns (1) ──< message_sends
 stores (1) ──< customers (1) ──< message_sends
 stores (1) ──< coupon_campaigns (1) ──< coupon_redemptions
 stores (1) ──< customers (1) ──< coupon_redemptions
 stores (1) ──< products (1) ──< causal_data
 stores (1) ──< kpi_snapshots
+stores (1) ──< workflows (1) ──< workflow_executions
+workflows (1) ──< marketing_campaigns      (via workflows.campaign_id)
+customers (1) ──< workflow_executions
+customer_segments (1) ──< workflow_executions
+workflow_executions (1) ──< message_sends
 holidays (shared reference, not tenant-specific)
+kpi_definitions (shared reference, not tenant-specific)
 ```
 
 ---
 
-## KPI Coverage
+## 24. KPI Coverage
 
 This section verifies that the proposed schema contains all data required by the 115 KPI cards defined in kpi-schema-mapping.md.
 
@@ -802,7 +1018,7 @@ This section verifies that the proposed schema contains all data required by the
 | Revenue by Period | `orders.order_date`, `order_items.sales_value` | COVERED |
 | Revenue by Channel | `message_sends.channel`, `is_purchased`, `order_items.sales_value` | COVERED |
 | Revenue by Category | `products.category`, `order_items.sales_value` | COVERED |
-| Revenue by Segment | `customer_segments.segment_id`, `order_items.sales_value` | COVERED |
+| Revenue by Segment | `customer_segments.segment_name`, `order_items.sales_value` | **Decision Required (#30)** |
 | Average Order Value | `order_items.sales_value`, `orders.source_order_id` | COVERED |
 | Revenue per Customer | `order_items.sales_value`, `orders.customer_id` | COVERED |
 | Revenue Growth Rate | `order_items.sales_value`, `orders.order_date` | COVERED |
@@ -928,7 +1144,7 @@ This section verifies that the proposed schema contains all data required by the
 | Purchase Intent Score | `customer_features.view_count`, `cart_count`, `view_to_cart_rate`, etc. | COVERED |
 | Future High-Value Score | `customer_features.recency`, `frequency`, `monetary`, etc. | COVERED |
 | Discount Responsiveness Score | `customer_features.total_discount_received`, `discount_dependency_ratio`, etc. | COVERED |
-| Churn Risk Score | `customer_features.tenure`, `warehouse_to_home`, etc. | COVERED |
+| Churn Risk Score | `customer_features.tenure`, `warehouse_to_home`, etc. | **Decision Required (#31)** |
 | Channel Preference | `customer_features.email_open_rate`, `email_click_rate`, etc. | COVERED |
 | Replenishment Readiness | `customer_features.days_since_last_purchase`, `purchase_frequency`, etc. | COVERED |
 | Cross-sell Affinity Score | `customer_features.basket_size`, `category_diversity`, etc. | COVERED |
@@ -964,7 +1180,9 @@ This section verifies that the proposed schema contains all data required by the
 | Channel Preference | 4 | 4 | 0 |
 | **Total** | **115** | **114** | **1** |
 
-**All 115 KPI cards have a corresponding column in this schema.** The 1 outstanding item is the Revenue Per Recipient attribution window, which is a *parameter* the documentation never defines rather than a missing column — see Open Decisions #2.
+**All 115 KPI cards have a corresponding column in this schema**, with 2 exceptions recorded as Decision Required: **#30** (Revenue by Segment expects `customer_segments.segment_name`, which does not exist) and **#31** (Churn Risk Score expects 7 attributes on `customer_features` that live on `customers`). The Revenue Per Recipient attribution window is a *parameter* the documentation never defines rather than a missing column — see Open Decisions #2.
+
+**Metadata tables added 2026-09-30 (do not change the card count):** `kpi_definitions` stores the definition, category, formula and refresh schedule of the same 115 cards; it **defines no new KPI cards**. `ml_models` adds no cards. `workflows` and `workflow_executions` are campaign-execution constructs and produce no cards. The total remains **115**.
 
 **Columns that are covered but whose upstream source is undetermined** (column exists, ingestion source is not documented anywhere): `orders.region` (#4), `orders.order_timestamp` (#5), `products.unit_price` (#11). These are marked in their table sections and in Open Decisions.
 
@@ -972,7 +1190,7 @@ This section verifies that the proposed schema contains all data required by the
 
 ---
 
-## Open Decisions
+## 25. Open Decisions
 
 Everything in this section is **undetermined by the valid project documentation** (schema-blueprint.md, segments-schema-mapping.md, the 9 segment files, kpi-schema-mapping.md, Overview.md). No column has been added, removed or renamed to resolve any of these.
 
@@ -1147,7 +1365,9 @@ All duplicates are retained and annotated in the `customer_features` section.
 
 **Undetermined.** kpi-schema-mapping.md requires metrics to *"calculate dynamically or refresh on a rolling 7-day schedule"* and requires immediate display on first upload, but does not state whether recomputation is full or incremental. `computed_at` is defined for staleness detection either way.
 
-**Decision Required:** full recompute vs. incremental. Noting only that `purchase_regularity`, `purchase_by_week` and `seasonal_concentration` all depend on full history.
+**Now also required by `final-schema-gaps.md` item 6:** the *requirement* to recompute on new platform-generated rows in `orders`, `order_items`, `message_sends` and `events` is confirmed by the gap file and is no longer optional. The gap file offers "a trigger or scheduled job" and does not choose between them, so only the requirement — not the mechanism — is settled by it.
+
+**Decision Required:** full recompute vs. incremental, and trigger vs. scheduled job. Noting only that `purchase_regularity`, `purchase_by_week` and `seasonal_concentration` all depend on full history.
 
 ---
 
@@ -1187,10 +1407,100 @@ No such table is defined in this schema. CTR is currently served from the source
 
 ---
 
-## Changelog
+## 26. Decisions Arising From `final-schema-gaps.md` (2026-09-30)
+
+The following arose while applying `final-schema-gaps.md`. Each records a place where the gap file was silent or incomplete. In every case the **minimal non-inventing completion was applied and annotated at the table**, never left to chance.
+
+### Closed — no longer open
+
+| # | Issue | Outcome |
+|---|---|---|
+| 17 | `roles` — no primary key specified | **Retired.** The `roles` table was removed by decision; the key question no longer applies. |
+| 18 | `store_users.role` not linked to `roles` | **Retired.** No `roles` table exists, so there is no relationship to define. `store_users.role` remains the single definition of the role vocabulary. |
+| 19 | `roles` conflicted with the fixed 3-role vocabulary | **Resolved.** With no per-store role table, the fixed set in `kpi-schema-mapping.md` card 5 (`owner` / `admin` / `member`) is the only role definition in the schema. The conflict is gone. |
+| 20 | `segment_definitions` not created | **Resolved by decision.** The existing `segments` table covers the requirement and holds `required_fields`. No second segment-definition table exists, so `customer_segments.segment_id` and `ml_models.segment_id` both unambiguously reference `segments.id`. |
+
+Their numbers are deliberately not reused.
+
+### Still open
+
+### 21. `ml_models` — no primary key specified
+
+Item **1** lists `segment_id`, `version`, `model_path`, `trained_at`, `metrics`, `is_active` and no key. Applied: composite PK `(segment_id, version)`.
+
+**Decision Required:** confirm the key.
+
+### 22. `ml_models` — "one active model per segment" not enforced
+
+`is_active` implies exactly one live model per segment, but the gap file specifies no such rule and none was invented.
+
+**Decision Required:** should a partial unique index `UNIQUE (segment_id) WHERE is_active` be added?
+
+**Related, not resolved:** this table is the natural home for recording which features a model was trained on, which is exactly what Open Decision #1 (Churn-Risk leakage) needs. No such column was added because the gap file does not specify one.
+
+### 23. `message_sends.workflow_execution_id` — ON DELETE not specified
+
+Item **5** says the column is nullable but not what happens when the workflow execution is deleted. Applied: `ON DELETE SET NULL`, preserving message and engagement rows.
+
+**Decision Required:** confirm `SET NULL`, or choose `CASCADE`.
+
+### 24. `workflows` — no primary key specified
+
+Item **3** lists no key, but `workflow_executions.workflow_id` is a UUID FK to this table. Applied: surrogate `id UUID`. **This is the only column in `workflows` not present in the gap file.**
+
+**Decision Required:** confirm the surrogate key.
+
+### 25. `workflows.campaign_id` nullability
+
+Not specified. Applied: `NULL`, because a `status = 'draft'` workflow may have no campaign yet and a `NOT NULL` column would make that impossible.
+
+**Decision Required:** confirm `NULL`, or instruct `NOT NULL`.
+
+### 26. `workflows.campaign_id` — ON DELETE not specified
+
+Applied: `ON DELETE SET NULL`, so a workflow survives deletion of its campaign.
+
+**Decision Required:** confirm, or choose `CASCADE`.
+
+### 27. `workflow_executions` — no primary key specified
+
+Item **4** lists no key, but `message_sends.workflow_execution_id` is a UUID FK to this table. Applied: surrogate `id UUID`. The alternative composite key `(workflow_id, customer_id)` would forbid one customer re-entering the same workflow twice, which a retry or re-enrolment flow would require.
+
+**Decision Required:** confirm the surrogate key.
+
+### 28. `workflow_executions.segment_id` nullability
+
+Item **4** says the segment triggered the execution, but `Overview.md` line 83 says a workflow is launched from a *"segment (or custom filter)"*. A custom-filter launch has no segment. Applied: `NULL`.
+
+**Decision Required:** confirm.
+
+### 29. `workflow_executions` has no `store_id`
+
+The gap file does not list `store_id`, so none was added. But this is a tenant-owned table, and `schema-blueprint.md` principle 1 states `store_id` goes on *"every tenant-owned row"*. Tenancy is currently reachable only by joining through `workflows`. The same gap exists for `store_users` and `order_items`.
+
+**Decision Required:** add `store_id` here for direct tenant filtering, consistent with the reasoning already applied to `customer_segments` (table 13)?
+
+### 30. `customer_segments.segment_name` — Revenue by Segment card
+
+**Found during full verification against the KPI mapping (2026-09-30).** The Revenue by Segment card requires `customer_segments.segment_name`. `customer_segments` has no such column; the segment name lives in `segments.name` and is reachable by join. An earlier draft of this document silently rewrote the requirement as `customer_segments.segment_id` and marked the card COVERED — that was incorrect and has been reverted.
+
+**Decision Required:** should `segment_name` be denormalised onto `customer_segments`, or is the join to `segments` acceptable? No column was added, because the KPI mapping is a fixed contract and adding one would be inventing a requirement.
+
+### 31. `customer_features.tenure` — Churn Risk Score card
+
+**Found during the same verification pass.** The Churn Risk Score card lists `customer_features.tenure`, `warehouse_to_home`, `number_of_devices_registered`, `satisfaction_score`, `complain`, `days_since_last_order`, `cashback_amount`. None of those seven exist on `customer_features`; all seven are columns on `customers`, which is where `segments-schema-mapping.md` Segment 4 maps them. Only `tenure` is written with the `customer_features.` prefix, and `customer_features` separately holds a computed `customer_tenure` — a different value with a similar name.
+
+**Decision Required:** confirm the card should read `customers.*` rather than `customer_features.*`, or mirror the seven columns onto the feature table. Neither was done unilaterally. This also interacts with Decision #1 (churn leakage) and Decision #22 (`ml_models` as the home for a model-input allowlist).
+
+---
+
+## 27. Changelog
 
 | Date | Change |
 |------|--------|
 | 2026-09-28 | Initial proposed final schema — 19 tables, 115 KPI coverage analysis, 10 open decisions |
-| 2026-09-28 | **Review pass.** Corrected against valid documentation only (`data-transformation-plan.md` excluded). Removed 2 invented columns (`holidays.country`, `coupon_redemptions.redeemed_at`); added 2 documented source columns (`customers.churn`, `message_sends.purchased_at`) plus 1 index; added `store_id` to `customer_segments` for tenant isolation; fixed `kpi_snapshots.store_id` nullable contradiction; resolved `sales_value` naming to the KPI-document name; annotated 3 duplicate `customer_features` pairs rather than deleting KPI-referenced columns; split the `store_id` tenant/source collision into a distinct `source_store_id` column in `orders` and `causal_data`; recorded `products.unit_price` as source-undetermined. KPI coverage now 114/115 with 1 parameter-only gap. Open Decisions expanded 10 → 16 and rewritten with cited conflicting evidence. |
+| 2026-09-28 | **Review pass.** Corrected against valid documentation only (`data-transformation-plan.md` excluded). Removed 2 invented columns (`holidays.country`, `coupon_redemptions.redeemed_at`); added 2 documented source columns (`customers.churn`, `message_sends.purchased_at`) plus 1 index; added `store_id` to `customer_segments` for tenant isolation; fixed `kpi_snapshots.store_id` nullable contradiction; resolved `sales_value` naming to the KPI-document name; annotated 3 duplicate `customer_features` pairs rather than deleting KPI-referenced columns; split the `store_id` tenant/source collision into a distinct `source_store_id` column in `orders` and `causal_data`; recorded `products.unit_price` as source-undetermined. KPI coverage 114/115 with 1 parameter-only gap. Open Decisions expanded 10 → 16 and rewritten with cited conflicting evidence. |
+| 2026-09-30 | **Gap-application pass.** Applied `docs/decisions/final-schema-gaps.md` (v. `3e3618f`): added tables `roles`, `ml_models`, `workflows`, `workflow_executions`, `kpi_definitions`; added `message_sends.workflow_execution_id` FK; added `segments.required_fields`; confirmed the `customer_features` refresh requirement (gap item 8) while leaving its mechanism at Decision #13. **19 → 24 tables.** Renumbered all sections into blueprint-group order. Repaired UTF-8 encoding damage introduced during renumbering. |
+| 2026-09-30 | **Two gap items closed by decision.** (1) The `roles` table was **removed** as not needed — **24 → 23 tables**. Removed with it: the `stores → roles` ER edge, the `roles` entry in the Table of Contents, the `roles` reference in the KPI Coverage note, and Open Decisions **#17, #18 and #19**. `store_users.role` is retained — it is required by `kpi-schema-mapping.md` card 5 and is now the sole definition of the role vocabulary (`owner` / `admin` / `member`). (2) A separate `segment_definitions` table was **not** created; `segments` already covers item 3 and holds `required_fields`, closing Open Decision **#20**. All sections and TOC renumbered −1. Decisions #17–#20 are retired and their numbers are not reused. `backend/schema.sql` remains **stale**. |
+| 2026-09-30 | **Gap-citation re-alignment pass (verification only).** `final-schema-gaps.md` deleted its former items 1 (`roles`) and 3 (`segment_definitions`) and **renumbered its remaining items to 1–6**, but this schema still cited the pre-renumbering numbers throughout. Every "Applied from" citation was re-aligned to the current numbering and the two deleted items are now labelled *former item*: `ml_models` → item 1, `kpi_definitions` → item 2, `workflows` → item 3, `workflow_executions` → item 4, `message_sends.workflow_execution_id` → item 5, `customer_features` refresh → item 6. A citation key was added to the revision note at the top of this document. Also: Open Decision #13 now names gap item 6 explicitly; `workflows` / `workflow_executions` / `kpi_definitions` notes now state that every specified column is present verbatim; the two gap-application sections (`Decisions Arising From final-schema-gaps.md`, `Changelog`) were added to the TOC as items 26 and 27 and the stray `#` heading downgraded to `##` to match. **No table, column, type, constraint, index, FK, count or decision was added, removed or changed — 23 tables and 115 KPI cards, both unchanged.** Earlier changelog rows above are a historical record and keep the item numbers that were current when written. `backend/schema.sql` still remains **stale**. |
 

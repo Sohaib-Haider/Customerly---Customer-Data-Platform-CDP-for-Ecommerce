@@ -1,34 +1,33 @@
 # Final Schema Gap Analysis
 
-**Status:** Draft — for review
-**Last Updated:** 2026-09-28
+**Status:** Updated — items 1 and 3 closed by decision
+**Last Updated:** 2026-09-30
 **Source documents:** `schema-blueprint.md`, `Overview.md`, `final-schema.md`
 
 ---
 
 ## Purpose
 
-This file documents tables that are missing from `final-schema.md` when measured against the design intent in `schema-blueprint.md` and the product requirements in `Overview.md`. The final schema covers the analytics and segmentation data model well, but it is missing tables needed for platform operations — role-based access, ML model versioning, segment configuration, KPI metadata, and the workflow builder.
+This file documents tables and relationships that are missing from `final-schema.md` when measured against the design intent in `schema-blueprint.md` and the product requirements in `Overview.md`. The final schema covers the analytics and segmentation data model well, but it is missing tables needed for platform operations — ML model versioning, KPI metadata, and the workflow builder.
+
+---
+
+## Items Removed by Decision (2026-09-30)
+
+Two items previously listed in this file are **no longer requirements**. Their sections have been removed; the record is kept here so the change is traceable.
+
+| Former item | Requirement | Outcome |
+|---|---|---|
+| 1 | `roles` table | **Removed — not needed.** Role permissions are application logic, not data. The role vocabulary (`owner` / `admin` / `member`) is a fixed platform-level set defined by `kpi-schema-mapping.md` card 5 and is carried on `store_users.role`. No per-store role table and no permissions table exist. |
+| 3 | `segment_definitions` table | **Removed — already covered.** The existing `segments` table holds all four attributes the item asked for: `name`, `segment_type`, `required_fields` and `description`. `required_fields` was added to `segments` to satisfy this. There is no second segment-definition table, and `customer_segments.segment_id` and `ml_models.segment_id` both reference `segments.id`. |
+
+All other items below are **unchanged**.
 
 ---
 
 ## Missing Tables
 
-### 1. `roles`
-
-`store_users` has a `role` column with text like "owner" or "admin", but no table defines what each role can actually do. Can an admin delete campaigns? Can a member view revenue? Without this, the app can't enforce who can do what.
-
-Django's built-in `auth.Group` and `auth.Permission` models are app-level, not per-store. For a multi-tenant product where each store has its own custom roles, a `roles` table with a `store_id` FK is needed — or Django's `Group` model must be extended with a `store_id` column.
-
-| Attribute | Type | Explanation |
-|---|---|---|
-| `store_id` | UUID | Which store this role belongs to |
-| `name` | VARCHAR | Role name (e.g. "owner", "admin", "member") |
-| `permissions` | JSONB | What this role can do (e.g. `["view_revenue", "delete_campaigns"]`) |
-
----
-
-### 2. `ml_models`
+### 1. `ml_models`
 
 The platform trains ML models for segments (Churn-Risk, Purchase Intent, etc.). But there's no table to store which model version is currently used for each segment. If you retrain a model, there's no record of what changed or which version is live. It's like having no version history for your ML code.
 
@@ -43,20 +42,7 @@ The platform trains ML models for segments (Churn-Risk, Purchase Intent, etc.). 
 
 ---
 
-### 3. `segment_definitions`
-
-Overview.md says segments are "config-driven, not hardcoded" — each segment has a `required_fields` schema that determines if a store's data qualifies for it. But there's no table that stores these definitions. Right now the segment configs would have to be written in code, which contradicts the "config-driven" requirement.
-
-| Attribute | Type | Explanation |
-|---|---|---|
-| `name` | VARCHAR | Segment name (e.g. "Churn-Risk") |
-| `segment_type` | VARCHAR | "ml" or "rule" |
-| `required_fields` | JSONB | What fields a store must have to use this segment |
-| `description` | TEXT | What this segment does |
-
----
-
-### 4. `kpi_definitions`
+### 2. `kpi_definitions`
 
 There are 115 KPI cards, but no table defines what each KPI is — its formula, category, refresh schedule, etc. Right now this info only exists in the documentation file. If someone wants to add or change a KPI, there's no database record to update.
 
@@ -70,7 +56,7 @@ There are 115 KPI cards, but no table defines what each KPI is — its formula, 
 
 ---
 
-### 5. `workflows`
+### 3. `workflows`
 
 Overview.md says users build campaigns with a "drag-and-drop workflow builder." But there's no table to store these workflows. A workflow is like: "When a customer abandons cart, wait 1 hour, then send WhatsApp message."
 
@@ -89,7 +75,7 @@ Following n8n's proven pattern, the entire workflow definition (nodes + connecti
 
 ---
 
-### 6. `workflow_executions`
+### 4. `workflow_executions`
 
 Once a workflow runs, you need to track which customer is at which step. Without this, you can't know who received which message or who's still waiting.
 
@@ -105,7 +91,7 @@ Once a workflow runs, you need to track which customer is at which step. Without
 
 ---
 
-### 7. Missing FK: `workflow_executions` → `message_sends`
+### 5. Missing FK: `workflow_executions` → `message_sends`
 
 When a workflow's send_message node fires, a record is created in `message_sends`. But there is no foreign key linking that message back to the `workflow_executions` row that caused it. Without this link, you cannot attribute message engagement (opens, clicks, purchases) to a specific workflow execution.
 
@@ -113,7 +99,7 @@ When a workflow's send_message node fires, a record is created in `message_sends
 
 ---
 
-### 8. Missing trigger: `customer_features` refresh on new data
+### 6. Missing trigger: `customer_features` refresh on new data
 
 When the platform generates new data (orders, messages, events) after a workflow runs, `customer_features` must be recomputed so ML segment scores and KPI cards reflect the latest activity. The schema has `computed_at` for staleness detection, but no mechanism to trigger incremental refresh when new rows arrive in `orders`, `order_items`, `message_sends`, or `events`.
 
@@ -135,15 +121,19 @@ The following tables exist in `final-schema.md` and are sufficient for their pur
 | Group 6: Analytics | `kpi_snapshots` |
 | Group 7: Campaign Management | `coupon_campaigns`, `coupon_redemptions` |
 
+Two further items from earlier revisions of this file are now covered and need no action:
+
+- **Role permissions** — application logic, not data. Covered by `store_users.role`.
+- **Segment configuration** (`required_fields`) — covered by the `segments` table.
+
 ---
 
 ## Recommendation
 
-Add the 6 missing tables to `final-schema.md` before freezing the schema. These tables are needed for:
+Add the 4 missing tables to `final-schema.md` before freezing the schema. These tables are needed for:
 
-- **Platform operations** — `roles` for access control
 - **ML pipeline** — `ml_models` for model versioning
-- **Config-driven architecture** — `segment_definitions` and `kpi_definitions` so segments and KPIs are data, not code
+- **Config-driven architecture** — `kpi_definitions` so KPIs are data, not code
 - **Campaign execution** — `workflows` (with nodes/connections as JSONB) and `workflow_executions` for the drag-and-drop workflow builder
 
 Additionally, 2 relationship/trigger gaps must be addressed:
@@ -152,3 +142,13 @@ Additionally, 2 relationship/trigger gaps must be addressed:
 - **Feature refresh on live data** — add a trigger or scheduled job to recompute `customer_features` when new platform-generated rows arrive in `orders`, `order_items`, `message_sends`, or `events`
 
 Without these tables and relationships, the platform cannot fulfill the product requirements described in `Overview.md`.
+
+---
+
+## Changelog
+
+| Date | Change |
+|---|---|
+| 2026-09-28 | Initial gap analysis — 7 candidate tables, workflow nodes table, FK gaps |
+| 2026-09-30 | Gap items consolidated — `workflow_nodes` folded into `workflows` JSONB, `workflow_executions` added, message-sends FK and feature-refresh trigger added |
+| 2026-09-30 | **Items 1 and 3 removed by decision.** `roles` removed as not needed (role vocabulary stays on `store_users.role`); `segment_definitions` removed as already covered by `segments`, which now holds `required_fields`. Remaining items renumbered 1–6, all content unchanged. |

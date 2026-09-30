@@ -2,8 +2,8 @@
 -- CDP — Canonical Database Schema (PostgreSQL)
 -- =============================================================================
 -- Generated from : docs/notes/schema-notes/final-schema.md
--- Generated on   : 2026-09-28
--- Tables         : 19
+-- Generated on   : 2026-09-30
+-- Tables         : 23
 --
 -- SOURCE OF TRUTH
 --   This file is a mechanical translation of final-schema.md. Column names,
@@ -21,52 +21,89 @@
 --     documented value vocabularies (stores.plan, store_users.role,
 --     event_type, channel, channel_norm, segment_type, period_type) are
 --     conflicting or incomplete in the source documentation
---     (final-schema.md Open Decisions #6), so no constraint is guessed.
---   - No triggers are declared. updated_at columns are set by the application.
+--     (final-schema.md Open Decision #6), so no constraint is guessed.
+--   - No triggers, no functions, no scheduled jobs are declared. The
+--     customer_features refresh mechanism is an OPEN DECISION (#13) and the
+--     `customer_features` refresh requirement from final-schema-gaps.md item 6
+--     is explicitly NOT implemented here.
+--
+-- CHANGES FROM THE PREVIOUS GENERATION (2026-09-28, 19 tables)
+--   Added   : segments.required_fields
+--             table ml_models
+--             table kpi_definitions
+--             table workflows
+--             table workflow_executions
+--             message_sends.workflow_execution_id (+ FK, + index)
+--   Removed : nothing — the previously generated `roles` table was already
+--             absent, and no `segment_definitions` table is or was created.
+--   19 -> 23 tables.
 --
 -- OPEN DECISIONS AFFECTING THIS FILE (see final-schema.md "Open Decisions")
 --   MUST resolve before this schema is considered production-ready:
---     #3  orders.source_store_id / causal_data.source_store_id name (applied as
---         `source_store_id` per the documented source_* convention, but the
---         source docs name it `store_id`; this collides with the tenant FK)
+--     #3  orders.source_store_id / causal_data.source_store_id name (emitted as
+--         `source_store_id`, matching the column list in final-schema.md; the
+--         source docs name it `store_id`, which collides with the tenant FK)
 --     #6  channel value sets (no constraint emitted — undecided)
---     #7  kpi_snapshots uniqueness (implemented as two partial unique indexes,
---         the mechanism named in final-schema.md; see note on that table)
+--     #7  kpi_snapshots uniqueness under nullable store_id (emitted exactly as
+--         documented: one plain UNIQUE constraint. Neither of the two candidate
+--         fixes is implemented, because choosing between them would resolve an
+--         open decision. See the note on that table.)
 --     #8  orders.source_order_id nullability (emitted as documented: NOT NULL)
 --     #12 duplicate customer_features columns (emitted as documented: all 6
 --         retained, because both names in each pair are KPI-referenced)
 --     #14 customer_features grain (emitted as documented: one row per customer)
+--     #13 customer_features refresh mechanism (NOT implemented — undecided)
 --     #15 tracked_links table (NOT created — undecided; out of scope here)
 --     #16 table name (kpi_snapshots used, per final-schema.md)
+--     #21 ml_models primary key (emitted as documented: (segment_id, version))
+--     #22 ml_models "one active model per segment" (NOT enforced — undecided)
+--     #24 workflows.id surrogate key (emitted — required by the FK from
+--         workflow_executions)
+--     #25 workflows.campaign_id nullability (emitted as documented: NULL)
+--     #26 workflows.campaign_id ON DELETE (emitted as documented: SET NULL)
+--     #27 workflow_executions.id surrogate key (emitted — required by the FK
+--         from message_sends)
+--     #28 workflow_executions.segment_id nullability (emitted as documented:
+--         NULL)
+--     #29 workflow_executions has no store_id (emitted as documented: none)
 --
 -- DEFERRED / NOT SCHEMA-BLOCKING (no DDL impact)
---     #1, #2, #4, #5, #9, #10, #11, #13
+--     #1, #2, #4, #5, #9, #10, #11, #30, #31
 --
 -- IMPLEMENTATION CONVENTIONS APPLIED (not specified in final-schema.md)
---   1. UUID columns marked [P] (platform-generated) use
+--   These are pre-existing conventions of this file, retained unchanged. They
+--   add no column, no constraint and no business rule.
+--   1. Surrogate `id UUID` primary keys marked [P] use
 --      DEFAULT gen_random_uuid(). Requires PostgreSQL 13+.
---   2. Timestamp columns marked [P] for record creation use DEFAULT now().
---   3. Defaults are added ONLY where final-schema.md documents one
---      (order_items discount columns DEFAULT 0, message_sends booleans
---      DEFAULT false).
+--   2. Record-creation timestamps marked [P] (created_at, updated_at,
+--      assigned_at, computed_at, uploaded_at, started_at) use DEFAULT now().
+--      Non-creation timestamps (sent_at, event_timestamp, order_timestamp,
+--      purchased_at, completed_at, trained_at) are left without a default.
+--   3. Other DEFAULTs are added ONLY where final-schema.md documents one:
+--      order_items discount columns DEFAULT 0, message_sends boolean columns
+--      DEFAULT false, ml_models.is_active DEFAULT false.
 --
 -- TABLE CREATION ORDER
---   Dependency-safe: referenced tables are always created first.
---     stores, segments, holidays              (no FKs)
---     store_users, customers, products        (FK -> stores)
---     ingestion_uploads                       (FK -> stores, store_users)
---     ingestion_column_mappings               (FK -> ingestion_uploads)
---     orders                                  (FK -> stores, customers)
---     order_items                             (FK -> orders, products)
---     events                                  (FK -> stores, customers, products)
---     customer_features                       (FK -> customers, stores)
---     customer_segments                       (FK -> stores, customers, segments)
---     marketing_campaigns                     (FK -> stores)
---     message_sends                           (FK -> stores, marketing_campaigns, customers)
---     coupon_campaigns                        (FK -> stores)
---     coupon_redemptions                      (FK -> stores, coupon_campaigns, customers)
---     causal_data                             (FK -> stores, products)
---     kpi_snapshots                           (FK -> stores)
+--   Dependency-safe: every referenced table is created before the table that
+--   references it. This does NOT follow the section numbers in
+--   final-schema.md, because `workflow_executions` (section 19) must be
+--   created BEFORE `message_sends` (section 15) — message_sends now carries a
+--   FK to it. The final-schema.md section number is noted on each table.
+--
+--     stores                                        (§1)
+--     store_users                                   (§2)
+--     ingestion_uploads                             (§3)
+--     ingestion_column_mappings                     (§4)
+--     customers, products                           (§5, §6)
+--     orders, order_items, events                   (§7, §8, §9)
+--     customer_features                             (§10)
+--     segments, ml_models, customer_segments        (§11, §12, §13)
+--     marketing_campaigns                           (§14)
+--     workflows, workflow_executions                (§18, §19)
+--     message_sends                                 (§15)  <- needs §19
+--     coupon_campaigns, coupon_redemptions          (§16, §17)
+--     holidays, causal_data                         (§20, §21)
+--     kpi_definitions, kpi_snapshots                (§22, §23)
 -- =============================================================================
 
 BEGIN;
@@ -75,7 +112,7 @@ BEGIN;
 -- Group 1: Platform Core
 -- -----------------------------------------------------------------------------
 
--- 1. stores — Tenant store accounts. Every other tenant-owned table references
+-- §1 stores — Tenant store accounts. Every other tenant-owned table references
 --    this table for isolation.
 CREATE TABLE stores (
     id         UUID         NOT NULL DEFAULT gen_random_uuid(),
@@ -89,7 +126,10 @@ CREATE TABLE stores (
 CREATE INDEX idx_stores_plan      ON stores (plan);
 CREATE INDEX idx_stores_created_at ON stores (created_at);
 
--- 2. store_users — Team members belonging to a store. Auth and role-based access.
+-- §2 store_users — Team members belonging to a store. Auth and role-based access.
+--    NOTE: `role` is a fixed platform-level vocabulary (owner / admin / member)
+--    defined by kpi-schema-mapping.md card 5. There is no `roles` table and no
+--    permissions table: role permissions are application logic, not data.
 CREATE TABLE store_users (
     id         UUID         NOT NULL DEFAULT gen_random_uuid(),
     store_id   UUID         NOT NULL,
@@ -109,7 +149,7 @@ CREATE INDEX idx_store_users_role     ON store_users (role);
 -- Group 2: Data Ingestion
 -- -----------------------------------------------------------------------------
 
--- 3. ingestion_uploads — Tracks every file upload for audit and traceability.
+-- §3 ingestion_uploads — Tracks every file upload for audit and traceability.
 CREATE TABLE ingestion_uploads (
     id            UUID         NOT NULL DEFAULT gen_random_uuid(),
     store_id      UUID         NOT NULL,
@@ -130,7 +170,7 @@ CREATE TABLE ingestion_uploads (
 CREATE INDEX idx_ingestion_uploads_store_id ON ingestion_uploads (store_id);
 CREATE INDEX idx_ingestion_uploads_status   ON ingestion_uploads (status);
 
--- 4. ingestion_column_mappings — LLM-powered mapping of source columns to
+-- §4 ingestion_column_mappings — LLM-powered mapping of source columns to
 --    canonical schema columns, per upload.
 CREATE TABLE ingestion_column_mappings (
     id            UUID         NOT NULL DEFAULT gen_random_uuid(),
@@ -154,27 +194,27 @@ CREATE INDEX idx_ingestion_column_mappings_upload_id
 -- Group 3: Canonical Customer Data
 -- -----------------------------------------------------------------------------
 
--- 5. customers — Normalized customer records. Central entity for segmentation,
+-- §5 customers — Normalized customer records. Central entity for segmentation,
 --    CLV and customer KPIs.
 --    NOTE: `churn` is a LABEL column (prediction target for the Churn-Risk
 --    segment) and must never be supplied as a model input feature. See
---    final-schema.md Open Decisions #1.
+--    final-schema.md Open Decision #1.
 CREATE TABLE customers (
-    id                        UUID          NOT NULL DEFAULT gen_random_uuid(),
-    store_id                  UUID          NOT NULL,
-    source_customer_id        VARCHAR(255)  NOT NULL,
-    first_purchase_date       DATE,
-    tenure                    INTEGER,
-    warehouse_to_home         NUMERIC(10,2),
+    id                          UUID          NOT NULL DEFAULT gen_random_uuid(),
+    store_id                    UUID          NOT NULL,
+    source_customer_id          VARCHAR(255)  NOT NULL,
+    first_purchase_date         DATE,
+    tenure                      INTEGER,
+    warehouse_to_home           NUMERIC(10,2),
     number_of_devices_registered INTEGER,
-    satisfaction_score        SMALLINT,
-    complain                  BOOLEAN,
-    days_since_last_order     INTEGER,
-    cashback_amount           NUMERIC(12,2),
-    preferred_order_category  VARCHAR(255),
-    churn                     BOOLEAN,
-    created_at                TIMESTAMPTZ   NOT NULL DEFAULT now(),
-    updated_at                TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    satisfaction_score          SMALLINT,
+    complain                    BOOLEAN,
+    days_since_last_order       INTEGER,
+    cashback_amount             NUMERIC(12,2),
+    preferred_order_category    VARCHAR(255),
+    churn                       BOOLEAN,
+    created_at                  TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    updated_at                  TIMESTAMPTZ   NOT NULL DEFAULT now(),
     CONSTRAINT pk_customers PRIMARY KEY (id),
     CONSTRAINT fk_customers_store
         FOREIGN KEY (store_id) REFERENCES stores (id) ON DELETE CASCADE,
@@ -188,7 +228,7 @@ CREATE INDEX idx_customers_days_since_last_order ON customers (days_since_last_o
 CREATE INDEX idx_customers_satisfaction_score    ON customers (satisfaction_score);
 CREATE INDEX idx_customers_complain              ON customers (complain);
 
--- 6. products — Normalized product catalog. Referenced by order_items, events
+-- §6 products — Normalized product catalog. Referenced by order_items, events
 --    and causal_data.
 CREATE TABLE products (
     id               UUID          NOT NULL DEFAULT gen_random_uuid(),
@@ -214,7 +254,7 @@ CREATE INDEX idx_products_brand      ON products (brand);
 CREATE INDEX idx_products_category   ON products (category);
 CREATE INDEX idx_products_department ON products (department);
 
--- 7. orders — Order header records. Groups order_items and links to customers.
+-- §7 orders — Order header records. Groups order_items and links to customers.
 --    NOTE: `source_store_id` is the source STORE_ID, distinct from the tenant
 --    `store_id` above. Name is Decision Required #3.
 --    NOTE: `region` has no documented source column (Decision Required #4) and
@@ -247,7 +287,7 @@ CREATE INDEX idx_orders_order_timestamp ON orders (order_timestamp);
 CREATE INDEX idx_orders_week_no         ON orders (week_no);
 CREATE INDEX idx_orders_region          ON orders (region);
 
--- 8. order_items — Line items per order. All financial values and discounts
+-- §8 order_items — Line items per order. All financial values and discounts
 --    live here (schema-blueprint principle 6).
 CREATE TABLE order_items (
     id                UUID         NOT NULL DEFAULT gen_random_uuid(),
@@ -270,7 +310,7 @@ CREATE TABLE order_items (
 CREATE INDEX idx_order_items_order_id   ON order_items (order_id);
 CREATE INDEX idx_order_items_product_id ON order_items (product_id);
 
--- 9. events — Behavioural events (view, cart, purchase, remove_from_cart).
+-- §9 events — Behavioural events (view, cart, purchase, remove_from_cart).
 --    Raw material for the Purchase Intent and Cart Abandoners segments.
 CREATE TABLE events (
     id              UUID          NOT NULL DEFAULT gen_random_uuid(),
@@ -304,7 +344,7 @@ CREATE INDEX idx_events_product_id      ON events (product_id);
 -- Group 4: Features & ML
 -- -----------------------------------------------------------------------------
 
--- 10. customer_features — Computed ML features, one row per customer.
+-- §10 customer_features — Computed ML features, one row per customer.
 --     Populated by scheduled platform jobs. Feeds all 9 ML segments.
 --     KNOWN ISSUE (Decision Required #12): three column pairs are duplicates
 --     under two names — (cart_removal_count / remove_from_cart_count),
@@ -314,6 +354,10 @@ CREATE INDEX idx_events_product_id      ON events (product_id);
 --     KNOWN ISSUE (Decision Required #14): days_since_last_purchase,
 --     purchase_frequency and avg_days_between_purchases are documented at
 --     customer x product grain but stored here at customer grain.
+--     NO REFRESH TRIGGER IS DEFINED. The requirement to recompute on new rows in
+--     orders / order_items / message_sends / events (final-schema-gaps.md item 6)
+--     is recorded, but the mechanism — trigger vs scheduled job vs queue — is
+--     Open Decision #13 and is deliberately not implemented.
 CREATE TABLE customer_features (
     customer_id                    UUID         NOT NULL,
     store_id                       UUID         NOT NULL,
@@ -400,18 +444,45 @@ CREATE INDEX idx_customer_features_computed_at ON customer_features (computed_at
 -- Group 5: Segmentation
 -- -----------------------------------------------------------------------------
 
--- 11. segments — Segment definitions. Platform-level, not store-specific.
+-- §11 segments — Segment definitions. Platform-level, not store-specific.
+--     `required_fields` is the config-driven gate: a segment only becomes
+--     available to a store if their ingested data satisfies this schema.
+--     There is no `segment_definitions` table — this one holds name,
+--     segment_type, required_fields and description.
 CREATE TABLE segments (
-    id           UUID         NOT NULL DEFAULT gen_random_uuid(),
-    name         VARCHAR(100) NOT NULL,
-    description  TEXT,
-    segment_type VARCHAR(50)  NOT NULL,
-    created_at   TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    id              UUID         NOT NULL DEFAULT gen_random_uuid(),
+    name            VARCHAR(100) NOT NULL,
+    description     TEXT,
+    segment_type    VARCHAR(50)  NOT NULL,
+    required_fields JSONB,
+    created_at      TIMESTAMPTZ  NOT NULL DEFAULT now(),
     CONSTRAINT pk_segments PRIMARY KEY (id),
     CONSTRAINT uq_segments_name UNIQUE (name)
 );
 
--- 12. customer_segments — Customer-to-segment assignments with ML scores.
+-- §12 ml_models — Version history for trained ML models: which version is live
+--     for each segment. Added per final-schema-gaps.md item 1.
+--     The gap file specifies no primary key; (segment_id, version) is applied as
+--     the minimal non-inventing completion (Decision Required #21).
+--     "At most one active model per segment" is NOT enforced — not requested by
+--     the gap file and left open (Decision Required #22).
+CREATE TABLE ml_models (
+    segment_id UUID         NOT NULL,
+    version    VARCHAR(50)  NOT NULL,
+    model_path VARCHAR(500) NOT NULL,
+    trained_at TIMESTAMPTZ  NOT NULL,
+    metrics    JSONB,
+    is_active  BOOLEAN      NOT NULL DEFAULT false,
+    CONSTRAINT pk_ml_models PRIMARY KEY (segment_id, version),
+    CONSTRAINT fk_ml_models_segment
+        FOREIGN KEY (segment_id) REFERENCES segments (id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_ml_models_segment_id ON ml_models (segment_id);
+CREATE INDEX idx_ml_models_is_active  ON ml_models (is_active);
+CREATE INDEX idx_ml_models_trained_at  ON ml_models (trained_at);
+
+-- §13 customer_segments — Customer-to-segment assignments with ML scores.
 --     store_id is present because this is a tenant-owned table queried directly
 --     by the Segment Size / Distribution / Multi-Segment KPI cards.
 CREATE TABLE customer_segments (
@@ -438,21 +509,22 @@ CREATE INDEX idx_customer_segments_segment_id  ON customer_segments (segment_id)
 CREATE INDEX idx_customer_segments_score       ON customer_segments (score);
 
 -- -----------------------------------------------------------------------------
--- Group 7: Campaign Management
+-- Campaigns and workflow builder
 -- -----------------------------------------------------------------------------
 
--- 13. marketing_campaigns — Marketing campaign definitions.
+-- §14 marketing_campaigns — Marketing campaign definitions. Referenced by
+--     message_sends for attribution, and by workflows.campaign_id.
 CREATE TABLE marketing_campaigns (
-    id                  UUID         NOT NULL DEFAULT gen_random_uuid(),
-    store_id            UUID         NOT NULL,
-    source_campaign_id  VARCHAR(255) NOT NULL,
-    campaign_type       VARCHAR(100) NOT NULL,
-    channel             VARCHAR(50)  NOT NULL,
-    topic               VARCHAR(255),
-    started_at          TIMESTAMPTZ,
-    finished_at         TIMESTAMPTZ,
-    total_count         INTEGER,
-    created_at          TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    id                 UUID         NOT NULL DEFAULT gen_random_uuid(),
+    store_id           UUID         NOT NULL,
+    source_campaign_id VARCHAR(255) NOT NULL,
+    campaign_type      VARCHAR(100) NOT NULL,
+    channel            VARCHAR(50)  NOT NULL,
+    topic              VARCHAR(255),
+    started_at         TIMESTAMPTZ,
+    finished_at        TIMESTAMPTZ,
+    total_count        INTEGER,
+    created_at         TIMESTAMPTZ  NOT NULL DEFAULT now(),
     CONSTRAINT pk_marketing_campaigns PRIMARY KEY (id),
     CONSTRAINT fk_marketing_campaigns_store
         FOREIGN KEY (store_id) REFERENCES stores (id) ON DELETE CASCADE,
@@ -460,34 +532,103 @@ CREATE TABLE marketing_campaigns (
         UNIQUE (store_id, source_campaign_id)
 );
 
-CREATE INDEX idx_marketing_campaigns_store_id       ON marketing_campaigns (store_id);
-CREATE INDEX idx_marketing_campaigns_channel        ON marketing_campaigns (channel);
-CREATE INDEX idx_marketing_campaigns_campaign_type  ON marketing_campaigns (campaign_type);
+CREATE INDEX idx_marketing_campaigns_store_id      ON marketing_campaigns (store_id);
+CREATE INDEX idx_marketing_campaigns_channel       ON marketing_campaigns (channel);
+CREATE INDEX idx_marketing_campaigns_campaign_type ON marketing_campaigns (campaign_type);
 
--- 14. message_sends — Individual message delivery and engagement tracking.
+-- §18 workflows — Drag-and-drop workflow definitions from the campaign builder.
+--     Added per final-schema-gaps.md item 3, following the n8n pattern: the
+--     whole definition (nodes + connections) is JSONB in one row. There is no
+--     workflow_nodes table.
+--     `id` is a surrogate key, the only column here not in the gap file; it is
+--     required because workflow_executions.workflow_id is a UUID FK to this
+--     table (Decision Required #24).
+--     `campaign_id` is nullable (a draft workflow may have no campaign yet —
+--     Decision Required #25) and uses ON DELETE SET NULL (#26).
+CREATE TABLE workflows (
+    id          UUID         NOT NULL DEFAULT gen_random_uuid(),
+    store_id    UUID         NOT NULL,
+    name        VARCHAR(255) NOT NULL,
+    status      VARCHAR(50)  NOT NULL,
+    nodes       JSONB,
+    connections JSONB,
+    campaign_id UUID,
+    created_at  TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    updated_at  TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    CONSTRAINT pk_workflows PRIMARY KEY (id),
+    CONSTRAINT fk_workflows_store
+        FOREIGN KEY (store_id) REFERENCES stores (id) ON DELETE CASCADE,
+    CONSTRAINT fk_workflows_campaign
+        FOREIGN KEY (campaign_id) REFERENCES marketing_campaigns (id) ON DELETE SET NULL
+);
+
+CREATE INDEX idx_workflows_store_id    ON workflows (store_id);
+CREATE INDEX idx_workflows_campaign_id ON workflows (campaign_id);
+CREATE INDEX idx_workflows_status      ON workflows (status);
+
+-- §19 workflow_executions — Which customer is at which step of a running
+--     workflow. Added per final-schema-gaps.md item 4.
+--     MUST be created before message_sends, which references it.
+--     `id` is a surrogate key, the only column here not in the gap file,
+--     required because message_sends.workflow_execution_id is a UUID FK to this
+--     table (Decision Required #27). A composite (workflow_id, customer_id)
+--     key was rejected because it would forbid one customer re-entering the
+--     same workflow twice.
+--     `segment_id` is nullable (Decision Required #28) and uses ON DELETE SET
+--     NULL, so the execution survives deletion of its triggering assignment.
+--     No store_id: the gap file does not list one (Decision Required #29).
+CREATE TABLE workflow_executions (
+    id                 UUID         NOT NULL DEFAULT gen_random_uuid(),
+    workflow_id        UUID         NOT NULL,
+    customer_id        UUID         NOT NULL,
+    segment_id         UUID,
+    current_node_index INTEGER,
+    status             VARCHAR(50)  NOT NULL,
+    started_at         TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    completed_at       TIMESTAMPTZ,
+    CONSTRAINT pk_workflow_executions PRIMARY KEY (id),
+    CONSTRAINT fk_workflow_executions_workflow
+        FOREIGN KEY (workflow_id) REFERENCES workflows (id) ON DELETE CASCADE,
+    CONSTRAINT fk_workflow_executions_customer
+        FOREIGN KEY (customer_id) REFERENCES customers (id) ON DELETE CASCADE,
+    CONSTRAINT fk_workflow_executions_segment
+        FOREIGN KEY (segment_id) REFERENCES customer_segments (id) ON DELETE SET NULL
+);
+
+CREATE INDEX idx_workflow_executions_workflow_id ON workflow_executions (workflow_id);
+CREATE INDEX idx_workflow_executions_customer_id ON workflow_executions (customer_id);
+CREATE INDEX idx_workflow_executions_segment_id  ON workflow_executions (segment_id);
+CREATE INDEX idx_workflow_executions_status      ON workflow_executions (status);
+
+-- §15 message_sends — Individual message delivery and engagement tracking.
 --     `channel_norm` normalises web_push / mobile_push to push (Segment 5).
 --     No value-set constraint is emitted: the documented normalisation table
 --     has no row for `whatsapp` (Decision Required #6).
+--     `workflow_execution_id` is the workflow-attribution FK added per
+--     final-schema-gaps.md item 5. It is NULLABLE — historically ingested
+--     messages have no workflow execution — and uses ON DELETE SET NULL so the
+--     message and its engagement data survive (Decision Required #23).
 CREATE TABLE message_sends (
-    id               UUID         NOT NULL DEFAULT gen_random_uuid(),
-    store_id         UUID         NOT NULL,
-    source_message_id VARCHAR(255) NOT NULL,
-    campaign_id      UUID         NOT NULL,
-    customer_id      UUID         NOT NULL,
-    message_type     VARCHAR(50)  NOT NULL,
-    channel          VARCHAR(50)  NOT NULL,
-    channel_norm     VARCHAR(50)  NOT NULL,
-    sent_at          TIMESTAMPTZ  NOT NULL,
-    is_opened        BOOLEAN      NOT NULL DEFAULT false,
-    is_clicked       BOOLEAN      NOT NULL DEFAULT false,
-    is_unsubscribed  BOOLEAN      NOT NULL DEFAULT false,
-    is_hard_bounced  BOOLEAN      NOT NULL DEFAULT false,
-    is_soft_bounced  BOOLEAN      NOT NULL DEFAULT false,
-    is_complained    BOOLEAN      NOT NULL DEFAULT false,
-    is_blocked       BOOLEAN      NOT NULL DEFAULT false,
-    is_purchased     BOOLEAN      NOT NULL DEFAULT false,
-    purchased_at     TIMESTAMPTZ,
-    created_at       TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    id                    UUID         NOT NULL DEFAULT gen_random_uuid(),
+    store_id              UUID         NOT NULL,
+    source_message_id     VARCHAR(255) NOT NULL,
+    campaign_id           UUID         NOT NULL,
+    customer_id           UUID         NOT NULL,
+    message_type          VARCHAR(50)  NOT NULL,
+    channel               VARCHAR(50)  NOT NULL,
+    channel_norm          VARCHAR(50)  NOT NULL,
+    sent_at               TIMESTAMPTZ  NOT NULL,
+    is_opened             BOOLEAN      NOT NULL DEFAULT false,
+    is_clicked            BOOLEAN      NOT NULL DEFAULT false,
+    is_unsubscribed       BOOLEAN      NOT NULL DEFAULT false,
+    is_hard_bounced       BOOLEAN      NOT NULL DEFAULT false,
+    is_soft_bounced       BOOLEAN      NOT NULL DEFAULT false,
+    is_complained         BOOLEAN      NOT NULL DEFAULT false,
+    is_blocked            BOOLEAN      NOT NULL DEFAULT false,
+    is_purchased          BOOLEAN      NOT NULL DEFAULT false,
+    purchased_at          TIMESTAMPTZ,
+    workflow_execution_id UUID,
+    created_at            TIMESTAMPTZ  NOT NULL DEFAULT now(),
     CONSTRAINT pk_message_sends PRIMARY KEY (id),
     CONSTRAINT fk_message_sends_store
         FOREIGN KEY (store_id) REFERENCES stores (id) ON DELETE CASCADE,
@@ -495,21 +636,24 @@ CREATE TABLE message_sends (
         FOREIGN KEY (campaign_id) REFERENCES marketing_campaigns (id) ON DELETE CASCADE,
     CONSTRAINT fk_message_sends_customer
         FOREIGN KEY (customer_id) REFERENCES customers (id) ON DELETE CASCADE,
+    CONSTRAINT fk_message_sends_workflow_execution
+        FOREIGN KEY (workflow_execution_id) REFERENCES workflow_executions (id) ON DELETE SET NULL,
     CONSTRAINT uq_message_sends_store_source
         UNIQUE (store_id, source_message_id)
 );
 
-CREATE INDEX idx_message_sends_store_id     ON message_sends (store_id);
-CREATE INDEX idx_message_sends_campaign_id  ON message_sends (campaign_id);
-CREATE INDEX idx_message_sends_customer_id  ON message_sends (customer_id);
-CREATE INDEX idx_message_sends_channel      ON message_sends (channel);
-CREATE INDEX idx_message_sends_channel_norm ON message_sends (channel_norm);
-CREATE INDEX idx_message_sends_sent_at      ON message_sends (sent_at);
-CREATE INDEX idx_message_sends_is_opened    ON message_sends (is_opened);
-CREATE INDEX idx_message_sends_is_clicked   ON message_sends (is_clicked);
-CREATE INDEX idx_message_sends_is_purchased ON message_sends (is_purchased);
+CREATE INDEX idx_message_sends_store_id              ON message_sends (store_id);
+CREATE INDEX idx_message_sends_campaign_id           ON message_sends (campaign_id);
+CREATE INDEX idx_message_sends_customer_id           ON message_sends (customer_id);
+CREATE INDEX idx_message_sends_channel               ON message_sends (channel);
+CREATE INDEX idx_message_sends_channel_norm          ON message_sends (channel_norm);
+CREATE INDEX idx_message_sends_sent_at               ON message_sends (sent_at);
+CREATE INDEX idx_message_sends_is_opened             ON message_sends (is_opened);
+CREATE INDEX idx_message_sends_is_clicked            ON message_sends (is_clicked);
+CREATE INDEX idx_message_sends_is_purchased          ON message_sends (is_purchased);
+CREATE INDEX idx_message_sends_workflow_execution_id ON message_sends (workflow_execution_id);
 
--- 15. coupon_campaigns — Coupon campaign definitions.
+-- §16 coupon_campaigns — Coupon campaign definitions.
 CREATE TABLE coupon_campaigns (
     id                 UUID         NOT NULL DEFAULT gen_random_uuid(),
     store_id           UUID         NOT NULL,
@@ -528,7 +672,7 @@ CREATE TABLE coupon_campaigns (
 CREATE INDEX idx_coupon_campaigns_store_id      ON coupon_campaigns (store_id);
 CREATE INDEX idx_coupon_campaigns_campaign_type ON coupon_campaigns (campaign_type);
 
--- 16. coupon_redemptions — Individual coupon redemption records.
+-- §17 coupon_redemptions — Individual coupon redemption records.
 CREATE TABLE coupon_redemptions (
     id                UUID         NOT NULL DEFAULT gen_random_uuid(),
     store_id          UUID         NOT NULL,
@@ -556,7 +700,7 @@ CREATE INDEX idx_coupon_redemptions_coupon_id         ON coupon_redemptions (cou
 -- Reference tables
 -- -----------------------------------------------------------------------------
 
--- 17. holidays — Shared holiday calendar. Not tenant-specific, so no store_id.
+-- §20 holidays — Shared holiday calendar. Not tenant-specific, so no store_id.
 CREATE TABLE holidays (
     id      UUID         NOT NULL DEFAULT gen_random_uuid(),
     date    DATE         NOT NULL,
@@ -567,7 +711,7 @@ CREATE TABLE holidays (
 
 CREATE INDEX idx_holidays_date ON holidays (date);
 
--- 18. causal_data — Product x source-store x week promotion flags (Dunnhumby).
+-- §21 causal_data — Product x source-store x week promotion flags (Dunnhumby).
 --     Required to serve the "Seasonal Purchase Propensity" KPI card via
 --     customer_features.promo_response_rate.
 CREATE TABLE causal_data (
@@ -587,35 +731,55 @@ CREATE TABLE causal_data (
         UNIQUE (store_id, source_store_id, product_id, week_no)
 );
 
-CREATE INDEX idx_causal_data_store_id         ON causal_data (store_id);
-CREATE INDEX idx_causal_data_product_id       ON causal_data (product_id);
-CREATE INDEX idx_causal_data_source_store_id  ON causal_data (source_store_id);
-CREATE INDEX idx_causal_data_week_no          ON causal_data (week_no);
+CREATE INDEX idx_causal_data_store_id        ON causal_data (store_id);
+CREATE INDEX idx_causal_data_product_id      ON causal_data (product_id);
+CREATE INDEX idx_causal_data_source_store_id ON causal_data (source_store_id);
+CREATE INDEX idx_causal_data_week_no         ON causal_data (week_no);
 
 -- -----------------------------------------------------------------------------
 -- Group 6: Analytics
 -- -----------------------------------------------------------------------------
 
--- 19. kpi_snapshots — Pre-computed KPI values for fast dashboard loading.
+-- §22 kpi_definitions — Metadata for all 115 KPI cards, so KPIs are data in
+--     the database rather than only a documentation file. Added per
+--     final-schema-gaps.md item 2. Platform-level reference table: no store_id.
+--     The gap file specifies no primary key and no column referencing this
+--     table, so `name` is used as the key — no surrogate id was invented, and
+--     kpi_snapshots.kpi_name is deliberately NOT wired to it as a foreign key
+--     because the gap file does not ask for that relationship.
+--     `formula` is NULL because kpi-schema-mapping.md does not yet define
+--     formulas. This table defines no new KPI cards; the total remains 115.
+CREATE TABLE kpi_definitions (
+    name             VARCHAR(100) NOT NULL,
+    category         VARCHAR(50)  NOT NULL,
+    formula          TEXT,
+    refresh_schedule VARCHAR(20),
+    description      TEXT,
+    CONSTRAINT pk_kpi_definitions PRIMARY KEY (name)
+);
+
+CREATE INDEX idx_kpi_definitions_category ON kpi_definitions (category);
+
+-- §23 kpi_snapshots — Pre-computed KPI values for fast dashboard loading.
 --     Populated by scheduled jobs.
 --
 --     store_id is NULLABLE: the 5 Platform Growth KPI cards are platform-level
 --     and have no store; every other card is always store-scoped.
 --
---     UNIQUENESS (Open Decision #7). final-schema.md requires
+--     UNIQUENESS (Open Decision #7 — UNRESOLVED, emitted as documented).
+--     final-schema.md declares one UNIQUE constraint over
 --       (store_id, kpi_name, period_type, period_start, dimension, dimension_value)
---     to be unique, and states that a plain UNIQUE constraint is insufficient
---     because PostgreSQL treats NULLs as distinct. The mechanism named in the
---     document — a partial unique index for the store_id IS NULL case — is
---     therefore implemented below as two partial unique indexes.
+--     and records in Open Decision #7 that a plain UNIQUE is insufficient,
+--     because PostgreSQL treats NULLs as distinct, so platform-level rows
+--     (store_id IS NULL) are not deduplicated. final-schema.md names two
+--     candidate fixes — a partial unique index, or NULLS NOT DISTINCT
+--     (PostgreSQL 15+) — and leaves the choice open.
 --
---     RESIDUAL ISSUE (not fixed here, undecided): period_start, dimension and
---     dimension_value are themselves nullable, so the same NULL-distinctness
---     problem recurs inside both partial indexes for 'total' period_type rows
---     and for ungrouped KPI values. Resolving it requires either NOT NULL
---     columns with sentinel values, COALESCE-based expression indexes, or a
---     NULLS NOT DISTINCT declaration (PostgreSQL 15+). The documentation does
---     not determine which, so no further constraint is invented.
+--     NEITHER FIX IS IMPLEMENTED HERE. Emitting either one would resolve Open
+--     Decision #7 by judgement, which this file does not do. The constraint
+--     below is exactly what final-schema.md documents, and the limitation is
+--     real: duplicate rows are possible for platform-level snapshots. Resolve
+--     Decision #7 before this schema goes to production.
 CREATE TABLE kpi_snapshots (
     id              UUID          NOT NULL DEFAULT gen_random_uuid(),
     store_id        UUID,
@@ -630,19 +794,10 @@ CREATE TABLE kpi_snapshots (
     computed_at     TIMESTAMPTZ   NOT NULL DEFAULT now(),
     CONSTRAINT pk_kpi_snapshots PRIMARY KEY (id),
     CONSTRAINT fk_kpi_snapshots_store
-        FOREIGN KEY (store_id) REFERENCES stores (id) ON DELETE CASCADE
+        FOREIGN KEY (store_id) REFERENCES stores (id) ON DELETE CASCADE,
+    CONSTRAINT uq_kpi_snapshots_scope
+        UNIQUE (store_id, kpi_name, period_type, period_start, dimension, dimension_value)
 );
-
--- Store-scoped snapshots: one value per KPI per period per dimension.
-CREATE UNIQUE INDEX uq_kpi_snapshots_store_scope
-    ON kpi_snapshots (store_id, kpi_name, period_type, period_start, dimension, dimension_value)
-    WHERE store_id IS NOT NULL;
-
--- Platform-level snapshots (Platform Growth cards): one value per KPI per
--- period per dimension, with store_id implicitly NULL.
-CREATE UNIQUE INDEX uq_kpi_snapshots_platform_scope
-    ON kpi_snapshots (kpi_name, period_type, period_start, dimension, dimension_value)
-    WHERE store_id IS NULL;
 
 CREATE INDEX idx_kpi_snapshots_store_id     ON kpi_snapshots (store_id);
 CREATE INDEX idx_kpi_snapshots_kpi_name     ON kpi_snapshots (kpi_name);
