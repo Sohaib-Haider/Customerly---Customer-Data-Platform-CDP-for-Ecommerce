@@ -1,6 +1,3 @@
-# ── opencode local config ──────────────────────────────────────────
-# skills, subagents, plugins, tooling — machine-specific, never commit
-.opencode/
 
 # ── Secrets ───────────────────────────────────────────────────────
 # .env is untracked; commit .env.example instead as the documented template
