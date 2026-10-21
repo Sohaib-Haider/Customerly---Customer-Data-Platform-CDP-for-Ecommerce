@@ -61,6 +61,9 @@ NOT_NULL = {
                          "start_date", "end_date"],
     "coupon_redemptions": ["id", "store_id", "coupon_id", "campaign_id", "customer_id",
                            "redemption_status"],
+    # Member B: events (Segments 1/9). product_id is nullable, so it is not here.
+    "events": ["id", "store_id", "customer_id", "session_id", "event_type",
+               "event_timestamp"],
 }
 
 UNIQUE = {
@@ -72,6 +75,7 @@ UNIQUE = {
     "coupon_campaigns": [["store_id", "source_campaign_id"]],
     "coupon_redemptions": [],
     "order_items": [],
+    "events": [],
 }
 
 # (child table, child column, parent table, parent column)
@@ -88,29 +92,42 @@ FOREIGN_KEYS = [
     ("coupon_redemptions", "store_id", "stores", "id"),
     ("coupon_redemptions", "campaign_id", "coupon_campaigns", "id"),
     ("coupon_redemptions", "customer_id", "customers", "id"),
+    # Member B: events
+    ("events", "store_id", "stores", "id"),
+    ("events", "customer_id", "customers", "id"),
+    ("events", "product_id", "products", "id"),
 ]
 
 
 def validate(frames: dict[str, pd.DataFrame], raw_counts: dict[str, int],
              dropped: dict[str, int],
              dropped_by_source: dict[str, int] | None = None,
-             anchor: date | None = None) -> Report:
+             anchor: date | None = None,
+             columns: dict[str, list[str]] | None = None) -> Report:
     """Check a dataset's output against schema.sql.
 
     `anchor` is that dataset's declared day-number anchor. Pass it only for a
     source with native day numbers; a source with real dates passes None and the
     calendar check is skipped (it has no anchor to be consistent with).
+
+    `columns` is the table -> column-order map for the tables this transform is
+    expected to emit. Defaults to the Dunnhumby set, so Member A's behaviour is
+    unchanged. Member B passes its own subset (stores, customers, products,
+    orders, order_items, events) so that tables it never emits are not reported
+    as "missing".
     """
     report = Report()
+    expected = columns if columns is not None else _default_columns()
 
     # ---- structure ------------------------------------------------------
-    for table, cols in NOT_NULL.items():
+    for table in expected:
+        cols = NOT_NULL.get(table, [])
         frame = frames.get(table)
         if frame is None:
             report.failures.append(f"{table}: missing from output")
             continue
         report.check(
-            list(frame.columns) == _expected_order(table),
+            list(frame.columns) == _expected_order(table, expected),
             f"{table}: column order matches schema.sql",
         )
         for col in cols:
@@ -150,7 +167,10 @@ def validate(frames: dict[str, pd.DataFrame], raw_counts: dict[str, int],
         if ccol not in cf.columns or pcol not in pf.columns:
             report.failures.append(f"{child}.{ccol} -> {parent}.{pcol}: column missing")
             continue
-        orphans = int((~cf[ccol].isin(set(pf[pcol]))).sum())
+        # A NULL child key is a legal absent reference (e.g. events.product_id is
+        # nullable), not an orphan — exclude it before the membership test.
+        child_values = cf[ccol].dropna()
+        orphans = int((~child_values.isin(set(pf[pcol]))).sum())
         report.check(
             orphans == 0,
             f"{child}.{ccol} -> {parent}.{pcol}: no orphans",
@@ -248,7 +268,11 @@ def validate(frames: dict[str, pd.DataFrame], raw_counts: dict[str, int],
     return report
 
 
-def _expected_order(table: str) -> list[str]:
+def _default_columns() -> dict[str, list[str]]:
     from dunnhumby import COLUMNS
 
-    return COLUMNS[table]
+    return COLUMNS
+
+
+def _expected_order(table: str, columns: dict[str, list[str]]) -> list[str]:
+    return columns[table]

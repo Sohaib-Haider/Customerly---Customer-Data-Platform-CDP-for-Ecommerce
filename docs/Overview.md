@@ -82,6 +82,8 @@ After mapping, check which segments the store's fields satisfy → run those seg
 ## Campaigns
 User picks a segment (or custom filter) → builds a workflow with drag-and-drop nodes: send-message (with variables like {{customer_name}}), wait/delay, channel-select (WhatsApp / SMS / email only).
 
+Segmentation only tells you *who* to target (`customer_segments` → `customer_id`). To reach them, the `customers` table carries two nullable contact columns: `email` for email campaigns and `phone_number` for SMS/WhatsApp. Both are optional because many e-commerce datasets have no contact details, so audience resolution skips any customer missing a usable address for the chosen channel rather than failing. Consent/opt-in tracking and holdout control groups are not yet modelled.
+
 ## Platform Users
 Separate `users` app for the ecommerce store's own account: signup/login/store profile. Distinct from the ingested end-customer data.
 

@@ -27,7 +27,23 @@
 --     `customer_features` refresh requirement from final-schema-gaps.md item 6
 --     is explicitly NOT implemented here.
 --
--- CHANGES FROM THE PREVIOUS GENERATION (2026-09-28, 19 tables)
+-- CHANGES FROM THE PREVIOUS GENERATION (2026-10-03, 23 tables)
+--   Added   : customers.email        (VARCHAR(255), NULL)
+--             customers.phone_number  (VARCHAR(50),  NULL)
+--   Removed : nothing
+--   Reason  : customer contact fields support downstream campaign activation
+--             after segmentation identifies the target audience. Email is used
+--             for email campaigns, while phone_number can be used for
+--             SMS/WhatsApp contact. Both nullable because not every ingested
+--             dataset/customer carries both contact methods.
+--   No new table was created. A separate `customer_contacts` table was
+--   considered and rejected; contact history, recipient tables, consent
+--   tracking and holdout controls are explicitly out of scope for this change.
+--   message_sends was NOT modified. No index was added on either column, and
+--   no existing column, PK, FK, UNIQUE or index was altered or removed.
+--   23 -> 23 tables.
+
+-- PREVIOUS GENERATION (2026-09-30, 19 tables)
 --   Added   : segments.required_fields
 --             table ml_models
 --             table kpi_definitions
@@ -199,6 +215,16 @@ CREATE INDEX idx_ingestion_column_mappings_upload_id
 --    NOTE: `churn` is a LABEL column (prediction target for the Churn-Risk
 --    segment) and must never be supplied as a model input feature. See
 --    final-schema.md Open Decision #1.
+--    NOTE: `email` and `phone_number` support downstream campaign activation
+--    after segmentation identifies the target audience. Email is used for
+--    email campaigns, while `phone_number` serves as the contact number for
+--    both SMS and WhatsApp. Both are NULLABLE because not every ingested
+--    dataset or customer carries both contact methods — behavioural datasets
+--    frequently have no contact information at all. No `customer_contacts`
+--    table exists (single-valued per customer, not part of the segmentation or
+--    KPI contract) and no index is defined on either column: they are resolved
+--    by PK lookup on the segment's customer_id list. Consent/opt-in tracking
+--    and contact history remain out of scope.
 CREATE TABLE customers (
     id                          UUID          NOT NULL DEFAULT gen_random_uuid(),
     store_id                    UUID          NOT NULL,
@@ -212,6 +238,8 @@ CREATE TABLE customers (
     days_since_last_order       INTEGER,
     cashback_amount             NUMERIC(12,2),
     preferred_order_category    VARCHAR(255),
+    email                       VARCHAR(255),
+    phone_number                VARCHAR(50),
     churn                       BOOLEAN,
     created_at                  TIMESTAMPTZ   NOT NULL DEFAULT now(),
     updated_at                  TIMESTAMPTZ   NOT NULL DEFAULT now(),

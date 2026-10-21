@@ -25,6 +25,33 @@ All other items below are **unchanged**.
 
 ---
 
+## Closed by Decision (2026-10-03)
+
+### Customer contact details — resolved as columns on `customers`, not a new table
+
+**Gap:** the `customers` table held no contact information. Segmentation produces a set of `customer_id`s via `customer_segments`, but the campaign layer's `send(channel, recipient, message)` interface needs a deliverable address per customer, and there was no join path from a segment membership row to a recipient. Campaign activation (Overview.md § Campaigns; proposal §7) could not execute.
+
+**Decision:** add two **nullable** columns to the existing `customers` table.
+
+| Attribute | Type | Explanation |
+|---|---|---|
+| `email` | VARCHAR(255) | Contact address for email campaigns |
+| `phone_number` | VARCHAR(50) | Contact number for SMS **and** WhatsApp |
+
+**Recorded rationale:** customer contact fields support downstream campaign activation after segmentation identifies the target audience. Email is used for email campaigns, while `phone_number` can be used for SMS/WhatsApp contact.
+
+**Why nullable:** not every ingested dataset or customer carries both contact methods. Behavioural e-commerce datasets (Online Retail II, the multi-category store clickstream) identify shoppers by anonymous or hash-based IDs with **no contact information at all**, and many real stores hold a phone but no email. NOT NULL would make such stores ineligible to upload; nullable allows audience resolution to skip customers without a usable address for the chosen channel.
+
+**Why no `whatsapp_number`:** WhatsApp is itself phone-number addressed and no current requirement asks for a distinct WhatsApp number. `phone_number` covers both. A separate column can be added later as a non-breaking `ADD COLUMN`.
+
+**Why no `customer_contacts` table:** contact details here are single-valued per customer, non-revisioned, and not part of the segmentation or KPI contract. A normalised child table would add a join to every campaign send without adding expressiveness. **No index** is defined on either column — they resolve by PK lookup on the segment's `customer_id` list, acceptable at SME store volumes.
+
+**Explicitly out of scope for this change:** `customer_consents`, contact history, recipient tables, holdout control groups, and any modification to `message_sends`. These remain unaddressed and are future work.
+
+**Net effect:** 23 tables → 23 tables. No column, PK, FK, UNIQUE or index on any existing table was altered or removed.
+
+---
+
 ## Missing Tables
 
 ### 1. `ml_models`
@@ -151,4 +178,5 @@ Without these tables and relationships, the platform cannot fulfill the product 
 |---|---|
 | 2026-09-28 | Initial gap analysis — 7 candidate tables, workflow nodes table, FK gaps |
 | 2026-09-30 | Gap items consolidated — `workflow_nodes` folded into `workflows` JSONB, `workflow_executions` added, message-sends FK and feature-refresh trigger added |
+| 2026-10-03 | **Customer contact fields closed by decision.** Added `customers.email VARCHAR(255)` and `customers.phone_number VARCHAR(50)`, both nullable. No new table; `customer_contacts` explicitly rejected. `phone_number` serves SMS and WhatsApp; no separate `whatsapp_number`. No index added; `message_sends` untouched. Consent tracking, contact history, recipient tables and holdout groups recorded as out of scope. 23 tables → 23 tables. |
 | 2026-09-30 | **Items 1 and 3 removed by decision.** `roles` removed as not needed (role vocabulary stays on `store_users.role`); `segment_definitions` removed as already covered by `segments`, which now holds `required_fields`. Remaining items renumbered 1–6, all content unchanged. |

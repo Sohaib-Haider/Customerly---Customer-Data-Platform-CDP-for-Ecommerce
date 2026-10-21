@@ -34,7 +34,13 @@ UUID_NAMESPACE = uuid.uuid5(
 
 # Per-dataset id prefix. "dnb" = Dunnhumby: The Complete Journey.
 # Add one namespace constant per source dataset as other members land theirs.
-SOURCE_NAMESPACES = {"dunnhumby": "dnb"}
+#   "evb" = eCommerce behavior data from multi category store (Member B, Segments 1/9)
+#   "ret" = Online Retail II (Member B, Segment 2)
+SOURCE_NAMESPACES = {
+    "dunnhumby": "dnb",
+    "behavior": "evb",
+    "online_retail_ii": "ret",
+}
 
 # ---------------------------------------------------------------------------
 # Date strategy — PER DATASET, never global.
@@ -56,8 +62,18 @@ SOURCE_NAMESPACES = {"dunnhumby": "dnb"}
 #   order_date = anchor_date + (day_no - 1)   (anchor configurable, default 2016-01-01)
 DATASET_ANCHORS = {
     "dunnhumby": date(2016, 1, 1),
-    # "online_retail_ii": <not applicable — real InvoiceDate, use window_offset>
+    # "behavior":            <not applicable — real event_time, use window_offset>
+    # "online_retail_ii":    <not applicable — real InvoiceDate, use window_offset>
 }
+
+# Shared timeline for the two real-date datasets in Member B's scope. Both ship
+# real timestamps on very different native ranges (behaviour Oct–Nov 2019; Online
+# Retail II Dec 2009 – Dec 2011), so window_offset() maps each dataset's own
+# earliest date onto this one day. That puts both datasets on a single calendar
+# with their intervals intact, which is what "align dates to a shared timeline"
+# means for the end-to-end platform demo. Member C uses the same reference date.
+# A source with native day numbers (Dunnhumby) must NOT use this — see anchor_for().
+SHARED_WINDOW_START = date(2024, 1, 1)
 
 
 def anchor_for(dataset: str) -> date:
@@ -138,10 +154,15 @@ def window_offset(real_dates: Iterable[date], window_start: date) -> int:
     return (window_start - min(real_dates)).days
 
 
-def shift_date(value: date | datetime, offset_days: int) -> date:
-    """Apply a window offset to a single real date."""
-    if isinstance(value, datetime):
-        value = value.date()
+def shift_date(value: date | datetime, offset_days: int) -> date | datetime:
+    """Apply a window offset to a single real date or timestamp.
+
+    A datetime keeps its time-of-day (only the date moves); a plain date returns
+    a date. Previously a datetime was truncated to its date, which silently
+    discarded the time component when aligning order_timestamp — Open Decision
+    #5 depends on that time being present. Callers that need a date explicitly
+    should pass a date, not a datetime.
+    """
     return value + timedelta(days=offset_days)
 
 
