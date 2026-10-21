@@ -46,6 +46,35 @@ These segment names identify the source data's intended use. They do not mean th
 
 ## Common Transformation Workflow
 
+### Notebook inputs and final output folders
+
+Each member's notebook downloads its assigned datasets directly using KaggleHub
+`dataset_download('<owner>/<dataset>')`, then reads the downloaded files from the
+returned cache directory. Manual placement of Kaggle files in `raw/` is not required
+for these notebooks. KaggleHub still caches the original downloads locally.
+
+Run each notebook from top to bottom after installing
+`data_prep/transform/requirements.txt`. The notebooks process the complete configured
+source files, without fixture substitution or row sampling. Member B's behavior
+transform reads the assigned October and November files in chunks; this processes
+all their rows without loading the entire event history into memory. Member C uses
+the published `messages-demo.csv` specified in its brief; downloading the whole
+dataset does not turn that source file into a larger message history.
+
+Final transformed CSVs are separated by member to avoid overwriting tables with
+the same filename:
+
+```text
+data_prep/processed/
+├── member_a_dunnhumby/
+├── member_b_behavior_and_retail/
+└── member_c_coupon_churn_messaging/
+```
+
+Each folder contains that member's table CSVs. These are separate outputs, not an
+automatically merged database export. Fixtures remain optional developer test inputs
+for the supporting scripts; the three notebooks use real Kaggle downloads.
+
 1. **Read the source data and reference mappings.** Identify the source fields, row grain and canonical destinations.
 2. **Clean and cast values.** Handle missing identifiers, whitespace, duplicate records and data types. Document removed rows and any information that cannot be represented.
 3. **Map columns to the canonical schema.** Shape customers, products, transaction lines, events and messaging records into the relevant tables. Resolve foreign keys consistently.

@@ -1,9 +1,0 @@
-event_time,event_type,product_id,category_id,category_code,brand,price,user_id,user_session
-2019-11-01 00:00:00 UTC,view,1001,11,electronics.smartphone,apple,899.0,5001,sess-h
-2019-11-01 00:05:00 UTC,cart,1007,18,apparel.shoes,nike,120.0,5004,sess-i
-2019-11-01 00:06:00 UTC,purchase,1007,18,apparel.shoes,nike,120.0,5004,sess-i
-2019-11-01 01:00:00 UTC,view,1008,19,beauty.skincare,,55.0,5005,sess-j
-2019-11-01 01:01:00 UTC,remove_from_cart,1008,19,beauty.skincare,,55.0,5005,sess-j
-2019-11-01 02:00:00 UTC,view,1001,11,electronics.smartphone,apple,899.0,5002,sess-k
-2019-11-01 02:01:00 UTC,cart,1001,11,electronics.smartphone,apple,899.0,5002,sess-k
-2019-11-01 02:02:00 UTC,purchase,1001,11,electronics.smartphone,apple,899.0,5002,sess-k
