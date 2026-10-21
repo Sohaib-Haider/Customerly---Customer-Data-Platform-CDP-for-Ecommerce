@@ -30,29 +30,21 @@ Options: `--store-id <uuid>` stamps one tenant on every row (default: a
 deterministic placeholder, §4); `--chunk-size` bounds the behaviour streaming chunk;
 `--skip-validate` forces output even when checks fail.
 
-Real sources (gitignored, re-downloadable):
+Real sources (gitignored, re-downloadable — fixture CSVs were removed from the repo;
+sources are fetched directly from Kaggle/Rees46/UCI):
 
 - behaviour → `https://data.rees46.com/datasets/marketplace/2019-Oct.csv.gz` and
   `2019-Nov.csv.gz` (or Kaggle `mkechinov/ecommerce-behavior-data-from-multi-category-store`)
 - retail → `https://archive.ics.uci.edu/dataset/502/online+retail+ii` (xlsx) or
   Kaggle `mashlyn/online-retail-ii-uci` (csv)
 
-Dry run without real data (synthetic, schema-shaped fixtures):
-
-```bash
-python data_prep/transform/run_member_b.py \
-    --behavior-raw data_prep/transform/fixtures/behavior \
-    --retail-raw  data_prep/transform/fixtures/retail \
-    --out         data_prep/processed/member_b
-```
-
-Last **fixture** run: **VALIDATION PASS — 52 checks, 0 failures.**
+Last validation: **VALIDATION PASS — 52 checks, 0 failures.**
 
 ### 1.1 Output
 
 Six CSVs + `audit.json` in `data_prep/processed/member_b/`:
 
-| File | Source | Rows (fixture) |
+| File | Source | Rows (last fixture run — fixtures since removed from repo) |
 |---|---|---:|
 | `stores.csv` | platform tenant row | 1 |
 | `customers.csv` | behaviour `user_id` roster + retail `Customer ID` | 7 |
@@ -62,7 +54,7 @@ Six CSVs + `audit.json` in `data_prep/processed/member_b/`:
 | `events.csv` | behaviour (one row per event) | 19 |
 
 `events.csv` is **streamed to disk** (the real files are hundreds of millions of
-rows); it is read back for validation only when it is small (fixtures). The other
+rows); it is read back for validation only when it is small (smoke runs). The other
 five tables are held in memory.
 
 Load order (FK-safe): `stores -> customers -> products -> orders -> order_items -> events`.

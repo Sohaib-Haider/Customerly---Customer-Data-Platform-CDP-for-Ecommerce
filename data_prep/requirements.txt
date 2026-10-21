@@ -1,8 +1,0 @@
-# Python dependencies for data_prep/transform (offline transformation stage).
-# Install: py -3.13 -m pip install -r data_prep/requirements.txt
-pandas>=2.0
-numpy>=1.26
-# retail.py reads online_retail_II.xlsx (UCI xlsx form) via pd.read_excel
-openpyxl>=3.1
-# member_c_transform.ipynb downloads its 3 Kaggle datasets directly
-kagglehub

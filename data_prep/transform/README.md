@@ -2,8 +2,8 @@
 
 Offline transforms: raw Kaggle CSVs → canonical-schema CSVs (`backend/schema.sql`).
 
-Dependencies: `pip install -r data_prep/requirements.txt` (pandas, numpy, openpyxl — `openpyxl` is
-required by `retail.py` to read the UCI `online_retail_II.xlsx`).
+Dependencies: `pip install -r data_prep/transform/requirements.txt` (pandas, numpy, openpyxl —
+`openpyxl` is required by `retail.py` to read the UCI `online_retail_II.xlsx`).
 
 Transformed data exists **only to test the platform end-to-end** (upload → column mapping →
 feature computation → dashboards, minus ML segment prediction). ML training runs separately
@@ -16,12 +16,11 @@ they clean, map, namespace ids, align dates, and shape rows.
 | `dunnhumby.py` | A | Segments 6/7/8 — see `DUNNHUMBY.md` (mappings, gaps, Open Decisions touched) |
 | `validate.py` | shared | NOT NULL / PK / UNIQUE / FK / calendar checks before anything is loaded |
 | `run_dunnhumby.py` | A | CLI, writes one CSV per canonical table + `audit.json` |
-| `fixtures/dunnhumby/` | A | synthetic source CSVs for dry runs (`data_prep/raw/` and `data_prep/processed/` are gitignored) |
+| `requirements.txt` | shared | transform-stage Python dependencies (`pip install -r data_prep/transform/requirements.txt`) |
 | `behavior.py` | B | Segments 1/9 — streaming `events` + derived `customers`/`products` |
 | `retail.py` | B | Segment 2 — `customers`, `products`, `orders`, `order_items` |
 | `run_member_b.py` | B | CLI for both B datasets, writes merged CSVs + `audit.json` |
 | `member_b_transform.ipynb` | B | notebook orchestrating `behavior.py` + `retail.py` (one source of truth; logic stays in the modules) |
-| `fixtures/behavior/`, `fixtures/retail/` | B | synthetic source CSVs for dry runs |
 | `BEHAVIOR_AND_RETAIL.md` | B | mappings, gaps, Open Decisions touched |
 
 Conventions every transform must follow:
