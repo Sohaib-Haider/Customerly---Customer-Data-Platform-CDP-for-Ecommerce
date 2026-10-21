@@ -2,6 +2,9 @@
 
 Offline transforms: raw Kaggle CSVs → canonical-schema CSVs (`backend/schema.sql`).
 
+Dependencies: `pip install -r data_prep/requirements.txt` (pandas, numpy, openpyxl — `openpyxl` is
+required by `retail.py` to read the UCI `online_retail_II.xlsx`).
+
 Transformed data exists **only to test the platform end-to-end** (upload → column mapping →
 feature computation → dashboards, minus ML segment prediction). ML training runs separately
 on the raw per-segment datasets, so these scripts do **not** compute features or aggregate —
