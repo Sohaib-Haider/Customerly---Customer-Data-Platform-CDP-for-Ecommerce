@@ -1,8 +1,7 @@
 # Behavior + Online Retail II Transform — Member B (Segments 1, 2, 9)
 
-**Status:** Draft — for review (synthetic fixtures validated green; real Kaggle data
-run pending review)
-**Last Updated:** 2026-10-20
+**Status:** Real Kaggle data run complete — **VALIDATION PASS (42 checks, 0 failures)** 2026-10-21.
+**Last Updated:** 2026-10-21
 
 Turns two Kaggle datasets into canonical-schema CSVs that can be bulk-loaded into
 `backend/schema.sql` — shaped data only, no feature computation:
@@ -38,20 +37,28 @@ sources are fetched directly from Kaggle/Rees46/UCI):
 - retail → `https://archive.ics.uci.edu/dataset/502/online+retail+ii` (xlsx) or
   Kaggle `mashlyn/online-retail-ii-uci` (csv)
 
-Last validation: **VALIDATION PASS — 52 checks, 0 failures.**
+Last validation (real data): **VALIDATION PASS — 42 checks, 0 failures.**
+(10 fewer than the fixture run's 52 because `events.csv` is 29.7 GB — the 10
+in-memory `events` checks are skipped when readback is off; events integrity
+holds by construction: `customers`/`products` are built from the same rows.)
 
 ### 1.1 Output
 
 Six CSVs + `audit.json` in `data_prep/processed/member_b/`:
 
-| File | Source | Rows (last fixture run — fixtures since removed from repo) |
+| File | Source | Rows (real Kaggle run, 2026-10-21) |
 |---|---|---:|
 | `stores.csv` | platform tenant row | 1 |
-| `customers.csv` | behaviour `user_id` roster + retail `Customer ID` | 7 |
-| `products.csv` | behaviour event catalog + retail `StockCode` catalog | 13 |
-| `orders.csv` | retail (one row per `Invoice`) | 4 |
-| `order_items.csv` | retail (one row per line) | 8 |
-| `events.csv` | behaviour (one row per event) | 19 |
+| `customers.csv` | behaviour `user_id` roster + retail `Customer ID` | 5,322,591 |
+| `products.csv` | behaviour event catalog + retail `StockCode` catalog | 211,522 |
+| `orders.csv` | retail (one row per `Invoice`) | 44,876 |
+| `order_items.csv` | retail (one row per line) | 824,364 |
+| `events.csv` | behaviour (one row per event) | 109,950,731 |
+
+Real run totals: behaviour offset +1553 days, retail offset +5144 days (both onto
+2024-01-01); 243,019 source rows dropped with recorded reasons (243,007 retail lines
+with empty `Customer ID` — `customer_id` is NOT NULL — and 12 events with an empty
+`user_session`); events NOT NULL violations: none.
 
 `events.csv` is **streamed to disk** (the real files are hundreds of millions of
 rows); it is read back for validation only when it is small (smoke runs). The other
@@ -275,4 +282,5 @@ Plus one scope question for the team (§3): the behaviour dataset must emit
 
 | Date | Change |
 |---|---|
+| 2026-10-21 | **Real Kaggle data run complete — VALIDATION PASS (42 checks, 0 failures).** 109,950,731 events (offset +1553d), 5,322,591 customers, 211,522 products, 44,876 orders, 824,364 order_items (offset +5144d). 243,019 drops recorded with reasons (243,007 empty `Customer ID`, 12 empty `user_session`). `openpyxl` added to `transform/requirements.txt` (retail xlsx read failed without it). Fixture CSVs removed from the repo per team direction — sources fetched directly from Kaggle/Rees46/UCI. |
 | 2026-10-20 | Initial draft: `common.py` (namespaces `evb`/`ret`, `SHARED_WINDOW_START`, `shift_date` datetime fix), `behavior.py` (streaming events + derived customers/products), `retail.py` (customers/products/orders/order_items), `run_member_b.py`, synthetic fixtures, `validate.py` extension. Fixtures validated green (52 checks). |
