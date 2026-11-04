@@ -8,7 +8,6 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-import sqlite3
 import uuid
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
@@ -190,17 +189,17 @@ def file_manifest(paths):
 
 
 def validate_stream(table, path, dimensions, stage, chunk_size=250_000):
-    """Validate every row, including global uniqueness, using disk-backed keys."""
+    """Validate every row, including global uniqueness, using partitioned Python key files."""
     errors, count = [], 0
-    db_path = Path(stage) / f'{table}-validation.sqlite'
-    db_path.unlink(missing_ok=True)
-    connection = sqlite3.connect(db_path)
     groups = SCHEMA[table]['unique']
-    for i, _ in enumerate(groups):
-        connection.execute(f'CREATE TABLE keys_{i} (value TEXT PRIMARY KEY) WITHOUT ROWID')
-    try:
+    # UUID keys occupy 16 bytes each, without database indexes or journals.
+    # General composite keys retain exact JSON values; hashes only route keys,
+    # never determine equality, so hash collisions cannot create false duplicates.
+    compact = [len(cols) == 1 and SCHEMA[table]['columns'][cols[0]]['type'] == 'UUID'
+               for cols in groups]
+    with tempfile.TemporaryDirectory(prefix=f'{table}-keys-', dir=stage) as workspace:
+        workspace = Path(workspace)
         for chunk in pd.read_csv(path, dtype=str, chunksize=chunk_size, keep_default_na=False, na_values=['']):
-            # Global keys are checked below; per-chunk validator also checks types/FKs.
             failures, exceptions = validate_frames({**dimensions, table: chunk}, only={table})
             for name, rejected in exceptions.items():
                 if name == table:
@@ -209,17 +208,41 @@ def validate_stream(table, path, dimensions, stage, chunk_size=250_000):
                     rejected.to_csv(target, mode='a', header=not target.exists(), index=False)
             errors.extend(failures)
             for i, cols in enumerate(groups):
-                keys = [(json.dumps(row, default=str),) for row in chunk[cols].itertuples(index=False, name=None)]
-                before = connection.total_changes
-                connection.executemany(f'INSERT OR IGNORE INTO keys_{i} VALUES (?)', keys)
-                if connection.total_changes - before != len(keys):
-                    errors.append(f'{table}: duplicate global key {cols}')
+                partitions = {}
+                for row in chunk[cols].itertuples(index=False, name=None):
+                    if compact[i]:
+                        try:
+                            key = uuid.UUID(str(row[0])).bytes
+                        except (ValueError, TypeError, AttributeError):
+                            continue  # Already rejected by the row validator.
+                        bucket = key[0]
+                        record = key
+                    else:
+                        key = json.dumps(row, default=str).encode('utf-8')
+                        bucket = hashlib.blake2b(key, digest_size=1).digest()[0]
+                        record = key + b'\n'
+                    partitions.setdefault(bucket, bytearray()).extend(record)
+                for bucket, records in partitions.items():
+                    with (workspace / f'{i}-{bucket}').open('ab') as stream:
+                        stream.write(records)
             count += len(chunk)
-            connection.commit()
-    finally:
-        connection.close()
-        db_path.unlink(missing_ok=True)
-    return list(dict.fromkeys(errors)), count
+        # Identical keys always land together, even across distant input chunks.
+        # Inspect one partition at a time instead of retaining every source ID.
+        for i, cols in enumerate(groups):
+            for partition in workspace.glob(f'{i}-*'):
+                seen = set()
+                duplicate = False
+                with partition.open('rb') as stream:
+                    records = iter(lambda: stream.read(16), b'') if compact[i] else iter(stream)
+                    for key in records:
+                        if key in seen:
+                            duplicate = True
+                            break
+                        seen.add(key)
+                partition.unlink()
+                if duplicate:
+                    errors.append(f'{table}: duplicate global key {cols}')
+        return list(dict.fromkeys(errors)), count
 
 
 def publish(output, frames, sources, raw_counts, *, dropped=None, notes=None,
