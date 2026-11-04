@@ -246,7 +246,8 @@ def validate_stream(table, path, dimensions, stage, chunk_size=250_000):
 
 
 def publish(output, frames, sources, raw_counts, *, dropped=None, notes=None,
-            stage=None, streams=None, sidecars=None, expected_counts=None, source_exceptions=None):
+            stage=None, streams=None, sidecars=None, expected_counts=None, source_exceptions=None,
+            accepted_source_exclusions=None, retain_previous=True):
     """Validate and stage a whole dataset; retain failed staging for diagnosis.
 
     Directory swap preserves the previous publication until validation passes.
@@ -264,7 +265,21 @@ def publish(output, frames, sources, raw_counts, *, dropped=None, notes=None,
     for table, expected in (expected_counts or {}).items():
         if counts.get(table) != expected:
             failures.append(f'{table}: expected {expected} rows, found {counts.get(table)}')
-    if dropped and any(dropped.values()):
+    # Explicitly accepted cleaning losses must have one retained exception row
+    # per excluded source row. Type/FK/uniqueness failures still block publication.
+    audited_exclusions = {}
+    for source, expected in (accepted_source_exclusions or {}).items():
+        candidates = [stage / 'exceptions' / Path(source).name]
+        if source_exceptions and source in source_exceptions:
+            actual = len(source_exceptions[source])
+        elif candidates[0].is_file():
+            actual = sum(len(c) for c in pd.read_csv(candidates[0], chunksize=250_000))
+        else:
+            actual = 0
+        audited_exclusions[source] = actual
+        if actual != expected:
+            failures.append(f'{source}: expected {expected} audited exclusions, found {actual}')
+    if dropped and any(dropped.values()) and not accepted_source_exclusions:
         failures.append('Source rows excluded: resolve the recorded exceptions before publication')
     for name, rejected in (source_exceptions or {}).items():
         if len(rejected):
@@ -291,6 +306,8 @@ def publish(output, frames, sources, raw_counts, *, dropped=None, notes=None,
                 'date_policy': 'real source dates unchanged; Dunnhumby anchor 2016-01-01; no cross-source timeline shift',
                 'currency_policy': 'source units unchanged; cross-source monetary totals unsupported until currencies verified',
                 'dropped': dropped or {}, 'notes': notes or [],
+                'accepted_source_exclusions': accepted_source_exclusions or {},
+                'audited_source_exclusions': audited_exclusions,
                 'source_exception_counts': {name: len(frame) for name, frame in (source_exceptions or {}).items()},
                 'reason_count_policy': 'Reason counts may overlap; source_exception_counts count distinct source rows.',
                 'validation': {'ok': not failures, 'failures': failures},
@@ -317,4 +334,11 @@ def publish(output, frames, sources, raw_counts, *, dropped=None, notes=None,
         if backup is not None:
             backup.rename(output)
         raise
+    if backup is not None and not retain_previous:
+        # Only delete the backup created by this publication, after a successful
+        # swap. Resolve and check its parent before any recursive removal.
+        resolved_backup = backup.resolve()
+        if resolved_backup.parent != output.resolve().parent or not backup.name.startswith(f'.{output.name}-previous-'):
+            raise ValueError('Refusing to remove a backup outside the output directory')
+        shutil.rmtree(resolved_backup)
     return manifest

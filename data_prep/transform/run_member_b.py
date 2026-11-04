@@ -26,12 +26,16 @@ def main():
     )
     publish(target, frames, paths, result.raw_counts, stage=stage,
             streams={'events': events}, dropped=result.dropped, notes=result.notes,
-            expected_counts={'events': sum(result.sampled_counts.values())})
+            expected_counts={'events': sum(result.sampled_counts.values()) - sum(result.dropped_by_source.values())},
+            accepted_source_exclusions={k: v for k, v in result.dropped_by_source.items() if v},
+            retain_previous=False)
     result = retail.transform(retail.load_raw(args.retail_raw), DEMO_STORE_ID)
     publish(output / 'online-retail-ii-uci', result.frames,
             [retail.resolve_raw_file(args.retail_raw)], result.raw_counts,
             dropped=result.dropped, notes=result.notes, source_exceptions=result.exceptions,
-            expected_counts={'order_items': sum(result.raw_counts.values())})
+            expected_counts={'order_items': sum(result.raw_counts.values()) - sum(result.dropped_by_source.values())},
+            accepted_source_exclusions={k: v for k, v in result.dropped_by_source.items() if v},
+            retain_previous=False)
     return 0
 
 

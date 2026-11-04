@@ -82,3 +82,18 @@ python -m unittest discover -s data_prep/transform -p "test_*.py"
 Tests use temporary synthetic inputs, never published sample CSVs. Real-source checks are separate from full notebook runs. A PostgreSQL import must still be verified in a configured database; no local PostgreSQL executable was available during implementation, so manifests explicitly record `database_import_verified: false`.
 
 Holiday identity is `(date, holiday)`, with UNIQUE(date, holiday), rather than UNIQUE(date). The raw calendar contains both Students day and Cyber Monday Sale on 2021-01-25; both names and the original date are retained. Downstream holiday filters must use EXISTS to avoid multiplying facts.
+
+
+## Member B cleaning and replacement policy
+
+Member B permits invalid source rows to be excluded only with a complete retained
+exception report. Expected outputs equal selected behavior rows (or full Retail
+rows) minus distinct rejected rows. Reason counts can overlap and are not used
+as the subtraction. All canonical type, relationship and uniqueness checks still
+apply. The manifest records accepted and audited exclusion counts. This overrides
+the earlier blanket source-exclusion gate for Member B only.
+
+Member B uses 250,000-row chunks and session hashing without categorical
+factorization. After validated publication, its previous dataset backup is removed;
+failed publication preserves the previous final dataset. Other members retain
+the existing strict exclusion and backup policies. No raw files are replaced.

@@ -131,7 +131,8 @@ def load_raw(raw_dir) -> dict[str, pd.DataFrame]:
         frame = pd.read_csv(path, dtype=str, low_memory=False, keep_default_na=False, na_values=[""])
         source_name = path.name
 
-    renamed = {dst: src for src, dst in _COLUMN_ALIASES.items() if src in frame.columns}
+    renamed = {src: dst for src, dst in _COLUMN_ALIASES.items()
+               if src in frame.columns and dst not in frame.columns}
     if renamed:
         frame = frame.rename(columns=renamed)
     return {source_name: frame}

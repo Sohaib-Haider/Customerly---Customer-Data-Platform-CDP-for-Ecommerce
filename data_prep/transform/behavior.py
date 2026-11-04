@@ -185,7 +185,7 @@ def session_sample_mask(chunk: pd.DataFrame, fraction: float, seed: int) -> pd.S
     keys = chunk[["user_id", "user_session"]].fillna("").astype(str)
     keys = keys.apply(lambda column: column.str.strip())
     hashes = pd.util.hash_pandas_object(
-        keys, index=False, hash_key=f"{seed:016x}",
+        keys, index=False, hash_key=f"{seed:016x}", categorize=False,
     )
     return hashes < int(fraction * 2**64)
 
