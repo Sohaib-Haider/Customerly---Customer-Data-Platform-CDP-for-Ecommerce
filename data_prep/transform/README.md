@@ -24,3 +24,14 @@ counts and sampling settings are recorded in the publication manifest notes.
 Run checks: `python -m unittest discover -s data_prep/transform -p "test_*.py"`.
 
 See [implementation validation](../../docs/notes/data_transformation_notes/implementation-validation.md) for measured full-source checks, representative checks, and remaining full-run/database verification.
+
+Install dependencies with `pip install -r data_prep/transform/requirements.txt`.
+This includes openpyxl for Online Retail II Excel input.
+
+The notebooks orchestrate the Python modules; do not run the modules separately.
+`run_dunnhumby.py` and `run_member_b.py` are alternative command-line entry points
+using the same canonical dataset folders and publication manifests.
+
+See `DUNNHUMBY.md` and `BEHAVIOR_AND_RETAIL.md` for detailed source mappings and
+historical findings; the shared contract takes precedence over older descriptions.
+`docs/decisions/data-transformation-plan.md` remains excluded from implementation.
