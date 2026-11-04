@@ -1,3 +1,5 @@
+> **Current implementation (2026-10-21):** [Shared transformation contract v2](transformation-contract.md) supersedes earlier store IDs, per-file date shifts, output paths and deduplication descriptions below.
+
 # Data Transformation — Member C
 
 **Scope:** Coupon Redemption + Customer Churn + Direct Messaging (Segments 3, 4, 5)

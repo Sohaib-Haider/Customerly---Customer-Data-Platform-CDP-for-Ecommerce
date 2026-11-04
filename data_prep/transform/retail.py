@@ -28,8 +28,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import pandas as pd
+from contract import decimal_value, canonical
 
 from common import (
+    DEMO_STORE_NAME, set_tenant,
     SHARED_WINDOW_START,
     shift_date,
     source_id,
@@ -75,7 +77,7 @@ COLUMNS = {
         "created_at",
     ],
     "order_items": [
-        "id", "order_id", "product_id", "quantity", "unit_price",
+        "id", "order_id", "product_id", "quantity", "source_timestamp", "unit_price",
         "sales_value", "retail_disc", "coupon_disc", "coupon_match_disc",
         "other_discount",
     ],
@@ -89,6 +91,7 @@ class TransformResult:
     dropped: dict[str, int] = field(default_factory=dict)
     dropped_by_source: dict[str, int] = field(default_factory=dict)
     raw_counts: dict[str, int] = field(default_factory=dict)
+    exceptions: dict[str, pd.DataFrame] = field(default_factory=dict)
 
     def drop(self, reason: str, count: int, source: str = "online_retail_II") -> None:
         if count:
@@ -121,11 +124,11 @@ def load_raw(raw_dir) -> dict[str, pd.DataFrame]:
     """Read the source (xlsx sheets or csv) and normalise its column names."""
     path = resolve_raw_file(raw_dir)
     if path.suffix.lower() in {".xlsx", ".xls"}:
-        sheets = pd.read_excel(path, sheet_name=None)
+        sheets = pd.read_excel(path, sheet_name=None, dtype=str, keep_default_na=False, na_values=[""])
         frame = pd.concat(sheets.values(), ignore_index=True)
         source_name = f"{path.name} ({len(sheets)} sheets)"
     else:
-        frame = pd.read_csv(path, dtype=str, low_memory=False)
+        frame = pd.read_csv(path, dtype=str, low_memory=False, keep_default_na=False, na_values=[""])
         source_name = path.name
 
     renamed = {dst: src for src, dst in _COLUMN_ALIASES.items() if src in frame.columns}
@@ -139,6 +142,7 @@ def load_raw(raw_dir) -> dict[str, pd.DataFrame]:
 # ---------------------------------------------------------------------------
 def transform(raw: dict[str, pd.DataFrame], store_id: str) -> TransformResult:
     """Run the Online Retail II transform and return canonical frames."""
+    set_tenant(store_id)
     result = TransformResult()
     source_name, src = next(iter(raw.items()))
     result.raw_counts[source_name] = len(src)
@@ -148,8 +152,8 @@ def transform(raw: dict[str, pd.DataFrame], store_id: str) -> TransformResult:
     stock = src["StockCode"].map(lambda v: source_id(v, DATASET))
     customer = src["Customer ID"].map(lambda v: source_id(v, DATASET))
     quantity = src["Quantity"].map(to_int)
-    unit_price = src["Price"].map(to_float)
-    invoice_ts = pd.to_datetime(src["InvoiceDate"], utc=True, errors="coerce")
+    unit_price = src["Price"].map(decimal_value)
+    invoice_ts = pd.to_datetime(src["InvoiceDate"], errors="coerce")
 
     # ---- drops: rows that cannot satisfy a NOT NULL or an FK ----------------
     result.drop("lines with empty Customer ID (customer_id NOT NULL)",
@@ -169,12 +173,21 @@ def transform(raw: dict[str, pd.DataFrame], store_id: str) -> TransformResult:
         (customer != "") & (invoice != "") & (stock != "")
         & invoice_ts.notna() & quantity.notna() & unit_price.notna()
     )
+    rejected = src.loc[~keep].copy()
+    rejected["source_row"] = rejected.index
+    rejected["exception_reason"] = ["; ".join(reason for bad, reason in (
+        (customer.loc[i] == "", "missing customer"), (invoice.loc[i] == "", "missing invoice"),
+        (stock.loc[i] == "", "missing stock"), (pd.isna(invoice_ts.loc[i]), "invalid date"),
+        (pd.isna(quantity.loc[i]), "invalid/inexact integer quantity"),
+        (pd.isna(unit_price.loc[i]), "invalid price")) if bad) for i in rejected.index]
+    result.exceptions[source_name] = rejected
+    result.dropped_by_source[source_name] = len(rejected)
     src = src[keep].copy()
     invoice, stock, customer = invoice[keep], stock[keep], customer[keep]
     quantity, unit_price, invoice_ts = quantity[keep], unit_price[keep], invoice_ts[keep]
 
     # ---- date alignment (real dates -> shared timeline) ---------------------
-    offset = (SHARED_WINDOW_START - invoice_ts.min().date()).days
+    offset = 0  # Keep real source dates.
     order_date = [shift_date(t, offset).date() for t in invoice_ts]
     order_timestamp = [shift_date(t, offset) for t in invoice_ts]
 
@@ -225,19 +238,25 @@ def transform(raw: dict[str, pd.DataFrame], store_id: str) -> TransformResult:
         "_date": order_date,
         "_ts": order_timestamp,
     })
+    order_frame["_region"] = src["Country"].values if "Country" in src else None
     grp = order_frame.groupby("_invoice", sort=False)
+    for col in ("_customer", "_date", "_region"):
+        if grp[col].nunique(dropna=False).gt(1).any():
+            raise ValueError(f"Conflicting invoice {col}; no arbitrary header selection")
     orders = pd.DataFrame({
         "source_order_id": list(grp.groups.keys()),
         "_customer": grp["_customer"].first().values,
         "order_date": grp["_date"].first().values,
         "order_timestamp": grp["_ts"].first().values,
     })
+    ambiguous_time = grp["_ts"].nunique(dropna=False).gt(1)
+    orders.loc[orders["source_order_id"].isin(ambiguous_time[ambiguous_time].index), "order_timestamp"] = None
     orders["id"] = orders["source_order_id"].map(lambda k: uid("orders", k))
     orders["customer_id"] = orders["_customer"].map(lambda k: uid("customers", k))
     orders["week_no"] = None
     orders["day_no"] = None
     orders["source_store_id"] = None
-    orders["region"] = None  # Open Decision #4 — Country excluded by Segment 2
+    orders["region"] = grp["_region"].first().values
     orders["created_at"] = None
     orders = orders[[c for c in COLUMNS["orders"] if c != "store_id"]]
     dup_orders = int(orders["id"].duplicated().sum())
@@ -253,19 +272,17 @@ def transform(raw: dict[str, pd.DataFrame], store_id: str) -> TransformResult:
         "unit_price": unit_price.values,
     })
     items["_line"] = items.groupby(["_invoice", "_product"]).cumcount()
-    items["id"] = [
-        uid("order_items", f"{i}|{p}|{n}")
-        for i, p, n in zip(items["_invoice"], items["_product"], items["_line"])
-    ]
+    items["id"] = [uid("order_items", f"ret:online_retail_II|{i}") for i in src.index]
     items["order_id"] = items["_invoice"].map(lambda k: uid("orders", k))
     items["product_id"] = items["_product"].map(lambda k: uid("products", k))
     # quantity is INTEGER in schema.sql; the map() above upcast it to float
     # because of the None cells that have since been dropped.
     items["quantity"] = items["quantity"].astype("int64")
+    items["source_timestamp"] = list(invoice_ts)
     # Segment 2 pricing note: this source has no discount columns, so the net
     # amount is quantity * unit_price (mapping L113/L124). Discounts stay 0.
     items["sales_value"] = [
-        round(q * p, 4) if (q is not None and p is not None) else 0.0
+        q * p if (q is not None and p is not None) else 0.0
         for q, p in zip(items["quantity"], items["unit_price"])
     ]
     items["retail_disc"] = 0.0
@@ -282,16 +299,15 @@ def transform(raw: dict[str, pd.DataFrame], store_id: str) -> TransformResult:
         "order_items": items,
     }
     result.note(
-        f"dates shifted by {offset} days so the earliest InvoiceDate "
-        f"({invoice_ts.min().date()}) lands on {SHARED_WINDOW_START} (shared timeline)"
+        "Real InvoiceDate retained with offset 0; timezone unknown (local wall time)."
     )
     result.note(
-        "orders.region left NULL — Segment 2 excludes Country; no geo source "
-        "resolved (Open Decision #4)"
+        "orders.region retains source Country for geography KPIs."
     )
     result.note(
         "cancellations and negative Quantity/Price are preserved as-is (real behaviour)"
     )
+    result.frames = {t: canonical(t, f, store_id) for t, f in result.frames.items()}
     return result
 
 
@@ -315,7 +331,7 @@ def _fallback_text(value, fallback: str) -> str:
 def _stores(store_id: str) -> pd.DataFrame:
     return pd.DataFrame([{
         "id": store_id,
-        "name": "Member B Demo Store",
+        "name": DEMO_STORE_NAME,
         "plan": "pro",
         "created_at": None,
         "updated_at": None,

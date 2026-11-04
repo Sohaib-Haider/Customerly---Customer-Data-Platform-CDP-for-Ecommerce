@@ -54,7 +54,7 @@ NOT_NULL = {
     "customers": ["id", "store_id", "source_customer_id"],
     "products": ["id", "store_id", "source_product_id", "name"],
     "orders": ["id", "store_id", "source_order_id", "customer_id", "order_date"],
-    "order_items": ["id", "order_id", "product_id", "quantity", "unit_price", "sales_value",
+    "order_items": ["id", "order_id", "product_id", "quantity", "sales_value",
                     "retail_disc", "coupon_disc", "coupon_match_disc", "other_discount"],
     "causal_data": ["id", "store_id", "product_id", "source_store_id", "week_no"],
     "coupon_campaigns": ["id", "store_id", "source_campaign_id", "campaign_type",
@@ -71,7 +71,7 @@ UNIQUE = {
     "customers": [["store_id", "source_customer_id"]],
     "products": [["store_id", "source_product_id"]],
     "orders": [["store_id", "source_order_id"]],
-    "causal_data": [["store_id", "source_store_id", "product_id", "week_no"]],
+    "causal_data": [],
     "coupon_campaigns": [["store_id", "source_campaign_id"]],
     "coupon_redemptions": [],
     "order_items": [],
@@ -117,6 +117,9 @@ def validate(frames: dict[str, pd.DataFrame], raw_counts: dict[str, int],
     as "missing".
     """
     report = Report()
+    from contract import validate_frames
+    strict_failures, _ = validate_frames(frames)
+    report.failures.extend(strict_failures)
     expected = columns if columns is not None else _default_columns()
 
     # ---- structure ------------------------------------------------------

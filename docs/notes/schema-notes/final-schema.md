@@ -211,7 +211,7 @@ This document defines the canonical PostgreSQL schema for the multi-tenant e-com
 | `satisfaction_score` | `SMALLINT` | NULL | [S] | CSAT score (1–5) |
 | `complain` | `BOOLEAN` | NULL | [S] | Whether customer raised a complaint |
 | `days_since_last_order` | `INTEGER` | NULL | [S] | Days since most recent order |
-| `cashback_amount` | `NUMERIC(12,2)` | NULL | [S] | Total cashback earned |
+| `cashback_amount` | `NUMERIC` | NULL | [S] | Total cashback earned |
 | `preferred_order_category` | `VARCHAR(255)` | NULL | [S] | Most-ordered product category |
 | `email` | `VARCHAR(255)` | NULL | [S] | Customer email address — contact point for email campaigns |
 | `phone_number` | `VARCHAR(50)` | NULL | [S] | Customer phone number — contact point for SMS / WhatsApp |
@@ -266,7 +266,7 @@ This document defines the canonical PostgreSQL schema for the multi-tenant e-com
 | `category` | `VARCHAR(255)` | NULL | [S] | Product category |
 | `department` | `VARCHAR(255)` | NULL | [S] | Store department (Dunnhumby) |
 | `commodity_desc` | `VARCHAR(255)` | NULL | [S] | Commodity description (Dunnhumby) |
-| `unit_price` | `NUMERIC(12,2)` | NULL | [S] | Current unit price |
+| `unit_price` | `NUMERIC` | NULL | [S] | Current unit price |
 | `created_at` | `TIMESTAMPTZ` | NOT NULL | [P] | Record creation timestamp |
 | `updated_at` | `TIMESTAMPTZ` | NOT NULL | [P] | Last update timestamp |
 
@@ -301,10 +301,10 @@ This document defines the canonical PostgreSQL schema for the multi-tenant e-com
 | `source_order_id` | `VARCHAR(255)` | NOT NULL | [S] | Original order ID from store's system |
 | `customer_id` | `UUID` | NOT NULL | [P] | FK → customers.id |
 | `order_date` | `DATE` | NOT NULL | [S] | Order date |
-| `order_timestamp` | `TIMESTAMPTZ` | NULL | [S] | Full timestamp with time-of-day |
+| `order_timestamp` | `TIMESTAMP` | NULL | [S] | Full timestamp with time-of-day |
 | `week_no` | `SMALLINT` | NULL | [S] | Native week number (Dunnhumby: 1–104) |
 | `day_no` | `SMALLINT` | NULL | [S] | Native study day (Dunnhumby: 1–711) |
-| `source_store_id` | `INT` | NULL | [S] | Source `STORE_ID` (Dunnhumby) — **name Decision Required, see #3** |
+| `source_store_id` | `VARCHAR(255)` | NULL | [S] | Source `STORE_ID` (Dunnhumby) — **name Decision Required, see #3** |
 | `region` | `VARCHAR(255)` | NULL | **Decision Required** | Geographic region — required by 2 KPI cards but has no documented source column. See #4 |
 | `created_at` | `TIMESTAMPTZ` | NOT NULL | [P] | Record creation timestamp |
 
@@ -347,12 +347,13 @@ This document defines the canonical PostgreSQL schema for the multi-tenant e-com
 | `order_id` | `UUID` | NOT NULL | [P] | FK → orders.id |
 | `product_id` | `UUID` | NOT NULL | [P] | FK → products.id |
 | `quantity` | `INTEGER` | NOT NULL | [S] | Number of units |
-| `unit_price` | `NUMERIC(12,2)` | NOT NULL | [S] | Price per unit at time of sale |
-| `sales_value` | `NUMERIC(12,2)` | NOT NULL | [S] | Net sales value (after discounts for Dunnhumby; quantity × unit_price for Online Retail II) |
-| `retail_disc` | `NUMERIC(12,2)` | NOT NULL DEFAULT 0 | [S] | Retail discount amount |
-| `coupon_disc` | `NUMERIC(12,2)` | NOT NULL DEFAULT 0 | [S] | Coupon discount amount |
-| `coupon_match_disc` | `NUMERIC(12,2)` | NOT NULL DEFAULT 0 | [S] | Coupon match discount amount |
-| `other_discount` | `NUMERIC(12,2)` | NOT NULL DEFAULT 0 | [S] | Other discount amount |
+| `source_timestamp` | `TIMESTAMP` | NULL | [S] | Original transaction-line local timestamp |
+| `unit_price` | `NUMERIC` | NULL | [S] | Price per unit at time of sale |
+| `sales_value` | `NUMERIC` | NOT NULL | [S] | Net sales value (after discounts for Dunnhumby; quantity × unit_price for Online Retail II) |
+| `retail_disc` | `NUMERIC` | NOT NULL DEFAULT 0 | [S] | Retail discount amount |
+| `coupon_disc` | `NUMERIC` | NOT NULL DEFAULT 0 | [S] | Coupon discount amount |
+| `coupon_match_disc` | `NUMERIC` | NOT NULL DEFAULT 0 | [S] | Coupon match discount amount |
+| `other_discount` | `NUMERIC` | NOT NULL DEFAULT 0 | [S] | Other discount amount |
 
 **Primary Key:** `id`
 
@@ -388,7 +389,7 @@ This document defines the canonical PostgreSQL schema for the multi-tenant e-com
 | `category_id` | `VARCHAR(255)` | NULL | [S] | Category ID from source |
 | `category_code` | `VARCHAR(255)` | NULL | [S] | Category grouping from source |
 | `brand` | `VARCHAR(255)` | NULL | [S] | Brand from source |
-| `price` | `NUMERIC(12,2)` | NULL | [S] | Price at time of event |
+| `price` | `NUMERIC` | NULL | [S] | Price at time of event |
 
 **Primary Key:** `id`
 
@@ -619,8 +620,8 @@ This document defines the canonical PostgreSQL schema for the multi-tenant e-com
 | `campaign_type` | `VARCHAR(100)` | NOT NULL | [S] | Type of campaign |
 | `channel` | `VARCHAR(50)` | NOT NULL | [S] | `email`, `whatsapp`, `sms`, `push` |
 | `topic` | `VARCHAR(255)` | NULL | [S] | Campaign topic |
-| `started_at` | `TIMESTAMPTZ` | NULL | [S] | Campaign start |
-| `finished_at` | `TIMESTAMPTZ` | NULL | [S] | Campaign end |
+| `started_at` | `TIMESTAMP` | NULL | [S] | Campaign start |
+| `finished_at` | `TIMESTAMP` | NULL | [S] | Campaign end |
 | `total_count` | `INTEGER` | NULL | [S] | Total messages in campaign |
 | `created_at` | `TIMESTAMPTZ` | NOT NULL | [P] | Record creation timestamp |
 
@@ -653,7 +654,7 @@ This document defines the canonical PostgreSQL schema for the multi-tenant e-com
 | `message_type` | `VARCHAR(50)` | NOT NULL | [S] | Type of message |
 | `channel` | `VARCHAR(50)` | NOT NULL | [S] | `email`, `whatsapp`, `sms`, `push` |
 | `channel_norm` | `VARCHAR(50)` | NOT NULL | [C] | Normalized channel: `email`, `sms`, `push` |
-| `sent_at` | `TIMESTAMPTZ` | NOT NULL | [S] | When message was sent |
+| `sent_at` | `TIMESTAMP` | NOT NULL | [S] | When message was sent |
 | `is_opened` | `BOOLEAN` | NOT NULL DEFAULT false | [S] | Whether message was opened |
 | `is_clicked` | `BOOLEAN` | NOT NULL DEFAULT false | [S] | Whether message was clicked |
 | `is_unsubscribed` | `BOOLEAN` | NOT NULL DEFAULT false | [S] | Whether user unsubscribed |
@@ -662,7 +663,7 @@ This document defines the canonical PostgreSQL schema for the multi-tenant e-com
 | `is_complained` | `BOOLEAN` | NOT NULL DEFAULT false | [S] | Marked as spam |
 | `is_blocked` | `BOOLEAN` | NOT NULL DEFAULT false | [S] | Message blocked |
 | `is_purchased` | `BOOLEAN` | NOT NULL DEFAULT false | [S] | Purchase attributed to this message |
-| `purchased_at` | `TIMESTAMPTZ` | NULL | [S] | When the attributed purchase occurred |
+| `purchased_at` | `TIMESTAMP` | NULL | [S] | When the attributed purchase occurred |
 | `workflow_execution_id` | `UUID` | NULL | [P] | FK → workflow_executions.id. NULL for historically ingested messages |
 | `created_at` | `TIMESTAMPTZ` | NOT NULL | [P] | Record creation timestamp |
 
@@ -859,7 +860,7 @@ This document defines the canonical PostgreSQL schema for the multi-tenant e-com
 **Primary Key:** `id`
 
 **Unique Constraints:**
-- `(date)` — one holiday per date
+- `(date, holiday)` — one holiday per date
 
 **Indexes:**
 - `idx_holidays_date` on `(date)` — for date-based lookups
@@ -881,7 +882,7 @@ This document defines the canonical PostgreSQL schema for the multi-tenant e-com
 | `id` | `UUID` | NOT NULL | [P] | Platform-generated ID (PK) |
 | `store_id` | `UUID` | NOT NULL | [P] | FK → stores.id (tenant isolation) |
 | `product_id` | `UUID` | NOT NULL | [P] | FK → products.id |
-| `source_store_id` | `INT` | NOT NULL | [S] | Source `STORE_ID` — **name Decision Required, see #3** |
+| `source_store_id` | `VARCHAR(255)` | NOT NULL | [S] | Source `STORE_ID` — **name Decision Required, see #3** |
 | `week_no` | `SMALLINT` | NOT NULL | [S] | Native week number (1–104) |
 | `display` | `VARCHAR(50)` | NULL | [S] | Display promotion flag |
 | `mailer` | `VARCHAR(50)` | NULL | [S] | Mailer promotion flag |
@@ -893,7 +894,7 @@ This document defines the canonical PostgreSQL schema for the multi-tenant e-com
 - `product_id` → `products.id` ON DELETE CASCADE
 
 **Unique Constraints:**
-- `(store_id, source_store_id, product_id, week_no)` — one record per product per source store per week
+- None beyond the primary key: preserve each promotion occurrence, including multiple codes at the same product/source-store/week.
 
 **Indexes:**
 - `idx_causal_data_store_id` on `(store_id)`
@@ -901,7 +902,7 @@ This document defines the canonical PostgreSQL schema for the multi-tenant e-com
 - `idx_causal_data_source_store_id` on `(source_store_id)`
 - `idx_causal_data_week_no` on `(week_no)`
 
-> **Why this table exists:** the Causal/Promotion KPI category (4 cards) was dropped in kpi-schema-mapping.md, so no KPI card reads this table directly. It is retained because segments-schema-mapping.md Segment 8 defines it as a new table needed, and because `customer_features.promo_response_rate` — which is required by the **"Seasonal Purchase Propensity"** card in kpi-schema-mapping.md — is computed by joining `orders` → `causal_data` on (`product_id`, `source_store_id`, `week_no`). Without this table that KPI card cannot be served.
+> **Why this table exists:** the Causal/Promotion KPI category (4 cards) was dropped in kpi-schema-mapping.md, so no KPI card reads this table directly. It is retained because segments-schema-mapping.md Segment 8 defines it as a new table needed, and because `customer_features.promo_response_rate` — which is required by the **"Seasonal Purchase Propensity"** card in kpi-schema-mapping.md — is computed using an EXISTS test through `order_items` and `orders` against `causal_data` on (`product_id`, `source_store_id`, `week_no`), with verified promotion-code semantics. Without this table that KPI card cannot be served.
 >
 > **Join key:** segments-schema-mapping.md Segment 8 states all three key columns are native source values and join with "no re-mapping".
 
@@ -1519,3 +1520,27 @@ The gap file does not list `store_id`, so none was added. But this is a tenant-o
 | 2026-09-30 | **Two gap items closed by decision.** (1) The `roles` table was **removed** as not needed — **24 → 23 tables**. Removed with it: the `stores → roles` ER edge, the `roles` entry in the Table of Contents, the `roles` reference in the KPI Coverage note, and Open Decisions **#17, #18 and #19**. `store_users.role` is retained — it is required by `kpi-schema-mapping.md` card 5 and is now the sole definition of the role vocabulary (`owner` / `admin` / `member`). (2) A separate `segment_definitions` table was **not** created; `segments` already covers item 3 and holds `required_fields`, closing Open Decision **#20**. All sections and TOC renumbered −1. Decisions #17–#20 are retired and their numbers are not reused. `backend/schema.sql` remains **stale**. |
 | 2026-09-30 | **Gap-citation re-alignment pass (verification only).** `final-schema-gaps.md` deleted its former items 1 (`roles`) and 3 (`segment_definitions`) and **renumbered its remaining items to 1–6**, but this schema still cited the pre-renumbering numbers throughout. Every "Applied from" citation was re-aligned to the current numbering and the two deleted items are now labelled *former item*: `ml_models` → item 1, `kpi_definitions` → item 2, `workflows` → item 3, `workflow_executions` → item 4, `message_sends.workflow_execution_id` → item 5, `customer_features` refresh → item 6. A citation key was added to the revision note at the top of this document. Also: Open Decision #13 now names gap item 6 explicitly; `workflows` / `workflow_executions` / `kpi_definitions` notes now state that every specified column is present verbatim; the two gap-application sections (`Decisions Arising From final-schema-gaps.md`, `Changelog`) were added to the TOC as items 26 and 27 and the stray `#` heading downgraded to `##` to match. **No table, column, type, constraint, index, FK, count or decision was added, removed or changed — 23 tables and 115 KPI cards, both unchanged.** Earlier changelog rows above are a historical record and keep the item numbers that were current when written. `backend/schema.sql` still remains **stale**. |
 
+
+
+## Transformation contract revision — 2026-10-21
+
+The ingestion-specific rules below supersede conflicting earlier notes and are implemented in `backend/schema.sql`. See [transformation-contract.md](../data_transformation_notes/transformation-contract.md) for provenance and KPI restrictions.
+
+- `order_items.unit_price` is nullable `NUMERIC`: a zero quantity or unavailable price does not imply a zero price. Source line totals remain authoritative.
+- Monetary columns on `customers` (`cashback_amount`), `products` (`unit_price`), `order_items` (all monetary fields), and `events` (`price`) use unconstrained `NUMERIC` so ingestion does not round source precision to two decimals. Display rounding belongs in the UI.
+- `causal_data` is one row per source occurrence with a UUID primary key. Remove `uq_causal_data_store_source_store_product_week`; multiple promotion codes and repeated occurrences at that grain are legitimate. Downstream promotion tests must use EXISTS or a deduplicated key projection before joining sales.
+- Source-local `orders.order_timestamp`, `marketing_campaigns.started_at` / `finished_at`, and `message_sends.sent_at` / `purchased_at` use `TIMESTAMP` without timezone. No undocumented timezone is assigned. Behavior `events.event_timestamp` retains `TIMESTAMPTZ`, because that source labels UTC. Platform audit timestamps retain `TIMESTAMPTZ`.
+- `sales_value` is the sole canonical column name. Preserve the source amount; Dunnhumby net semantics do not establish coupon selling-price semantics. Coupon gross/net interpretation remains unverified. Never subtract discounts twice.
+- Source coupon `coupon_discount` maps to `order_items.coupon_disc`, retaining its sign. Its meaning remains source-specific; it is not automatically a reimbursed manufacturer coupon.
+- Retail `Country` maps to `orders.region`. Missing geography stays NULL.
+- Messaging campaign identity uses `(campaign_type, id)` because seven raw IDs occur in both bulk and transactional campaigns. Messages link using `(message_type, campaign_id)`.
+- Coupon order IDs identify source transaction lines, not observed baskets. True basket counts and AOV are unsupported for this population.
+- Raw fields without canonical destinations are preserved in named `source_preservation` CSVs where implemented (coupon-item relationships, campaign exposure, redemption day). These are explicitly not canonical database tables. Raw files remain immutable.
+
+The source-preserving schema does not resolve product-grain replenishment feature storage or introduce ML feature computation. Such features and unsupported KPIs remain unavailable until their platform representation is defined. These are coverage limits, not zero values.
+
+The v2 order_items schema additionally retains nullable `source_timestamp TIMESTAMP` per source line. Ambiguous order-header timestamps stay NULL; line times remain available.
+
+Native source-store identifiers use `VARCHAR(255)` in orders and causal_data so leading zeros are retained; these are separate from the shared tenant UUID.
+
+Holiday identity is `(date, holiday)`, with UNIQUE(date, holiday), rather than UNIQUE(date). The raw calendar contains both Students day and Cyber Monday Sale on 2021-01-25; both names and the original date are retained. Downstream holiday filters must use EXISTS to avoid multiplying facts.

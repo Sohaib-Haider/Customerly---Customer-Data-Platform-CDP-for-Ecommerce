@@ -1,3 +1,6 @@
+-- Transformation contract v2 (2026-10-21): source precision, nullable unknown
+-- unit prices, source-local wall times, and occurrence-grain promotions.
+-- See docs/notes/data_transformation_notes/transformation-contract.md.
 -- =============================================================================
 -- CDP — Canonical Database Schema (PostgreSQL)
 -- =============================================================================
@@ -236,7 +239,7 @@ CREATE TABLE customers (
     satisfaction_score          SMALLINT,
     complain                    BOOLEAN,
     days_since_last_order       INTEGER,
-    cashback_amount             NUMERIC(12,2),
+    cashback_amount             NUMERIC,
     preferred_order_category    VARCHAR(255),
     email                       VARCHAR(255),
     phone_number                VARCHAR(50),
@@ -267,7 +270,7 @@ CREATE TABLE products (
     category         VARCHAR(255),
     department       VARCHAR(255),
     commodity_desc   VARCHAR(255),
-    unit_price       NUMERIC(12,2),
+    unit_price       NUMERIC,
     created_at       TIMESTAMPTZ   NOT NULL DEFAULT now(),
     updated_at       TIMESTAMPTZ   NOT NULL DEFAULT now(),
     CONSTRAINT pk_products PRIMARY KEY (id),
@@ -293,10 +296,10 @@ CREATE TABLE orders (
     source_order_id  VARCHAR(255) NOT NULL,
     customer_id      UUID         NOT NULL,
     order_date       DATE         NOT NULL,
-    order_timestamp  TIMESTAMPTZ,
+    order_timestamp  TIMESTAMP,
     week_no          SMALLINT,
     day_no           SMALLINT,
-    source_store_id  INT,
+    source_store_id  VARCHAR(255),
     region           VARCHAR(255),
     created_at       TIMESTAMPTZ  NOT NULL DEFAULT now(),
     CONSTRAINT pk_orders PRIMARY KEY (id),
@@ -322,12 +325,13 @@ CREATE TABLE order_items (
     order_id          UUID         NOT NULL,
     product_id        UUID         NOT NULL,
     quantity          INTEGER      NOT NULL,
-    unit_price        NUMERIC(12,2) NOT NULL,
-    sales_value       NUMERIC(12,2) NOT NULL,
-    retail_disc       NUMERIC(12,2) NOT NULL DEFAULT 0,
-    coupon_disc       NUMERIC(12,2) NOT NULL DEFAULT 0,
-    coupon_match_disc NUMERIC(12,2) NOT NULL DEFAULT 0,
-    other_discount    NUMERIC(12,2) NOT NULL DEFAULT 0,
+    source_timestamp  TIMESTAMP,
+    unit_price        NUMERIC,
+    sales_value       NUMERIC NOT NULL,
+    retail_disc       NUMERIC NOT NULL DEFAULT 0,
+    coupon_disc       NUMERIC NOT NULL DEFAULT 0,
+    coupon_match_disc NUMERIC NOT NULL DEFAULT 0,
+    other_discount    NUMERIC NOT NULL DEFAULT 0,
     CONSTRAINT pk_order_items PRIMARY KEY (id),
     CONSTRAINT fk_order_items_order
         FOREIGN KEY (order_id) REFERENCES orders (id) ON DELETE CASCADE,
@@ -351,7 +355,7 @@ CREATE TABLE events (
     category_id     VARCHAR(255),
     category_code   VARCHAR(255),
     brand           VARCHAR(255),
-    price           NUMERIC(12,2),
+    price           NUMERIC,
     CONSTRAINT pk_events PRIMARY KEY (id),
     CONSTRAINT fk_events_store
         FOREIGN KEY (store_id) REFERENCES stores (id) ON DELETE CASCADE,
@@ -549,8 +553,8 @@ CREATE TABLE marketing_campaigns (
     campaign_type      VARCHAR(100) NOT NULL,
     channel            VARCHAR(50)  NOT NULL,
     topic              VARCHAR(255),
-    started_at         TIMESTAMPTZ,
-    finished_at        TIMESTAMPTZ,
+    started_at         TIMESTAMP,
+    finished_at        TIMESTAMP,
     total_count        INTEGER,
     created_at         TIMESTAMPTZ  NOT NULL DEFAULT now(),
     CONSTRAINT pk_marketing_campaigns PRIMARY KEY (id),
@@ -645,7 +649,7 @@ CREATE TABLE message_sends (
     message_type          VARCHAR(50)  NOT NULL,
     channel               VARCHAR(50)  NOT NULL,
     channel_norm          VARCHAR(50)  NOT NULL,
-    sent_at               TIMESTAMPTZ  NOT NULL,
+    sent_at               TIMESTAMP  NOT NULL,
     is_opened             BOOLEAN      NOT NULL DEFAULT false,
     is_clicked            BOOLEAN      NOT NULL DEFAULT false,
     is_unsubscribed       BOOLEAN      NOT NULL DEFAULT false,
@@ -654,7 +658,7 @@ CREATE TABLE message_sends (
     is_complained         BOOLEAN      NOT NULL DEFAULT false,
     is_blocked            BOOLEAN      NOT NULL DEFAULT false,
     is_purchased          BOOLEAN      NOT NULL DEFAULT false,
-    purchased_at          TIMESTAMPTZ,
+    purchased_at          TIMESTAMP,
     workflow_execution_id UUID,
     created_at            TIMESTAMPTZ  NOT NULL DEFAULT now(),
     CONSTRAINT pk_message_sends PRIMARY KEY (id),
@@ -734,7 +738,7 @@ CREATE TABLE holidays (
     date    DATE         NOT NULL,
     holiday VARCHAR(255) NOT NULL,
     CONSTRAINT pk_holidays PRIMARY KEY (id),
-    CONSTRAINT uq_holidays_date UNIQUE (date)
+    CONSTRAINT uq_holidays_date_name UNIQUE (date, holiday)
 );
 
 CREATE INDEX idx_holidays_date ON holidays (date);
@@ -746,7 +750,7 @@ CREATE TABLE causal_data (
     id              UUID         NOT NULL DEFAULT gen_random_uuid(),
     store_id        UUID         NOT NULL,
     product_id      UUID         NOT NULL,
-    source_store_id INT          NOT NULL,
+    source_store_id VARCHAR(255)          NOT NULL,
     week_no         SMALLINT     NOT NULL,
     display         VARCHAR(50),
     mailer          VARCHAR(50),
@@ -754,9 +758,7 @@ CREATE TABLE causal_data (
     CONSTRAINT fk_causal_data_store
         FOREIGN KEY (store_id) REFERENCES stores (id) ON DELETE CASCADE,
     CONSTRAINT fk_causal_data_product
-        FOREIGN KEY (product_id) REFERENCES products (id) ON DELETE CASCADE,
-    CONSTRAINT uq_causal_data_store_source_store_product_week
-        UNIQUE (store_id, source_store_id, product_id, week_no)
+        FOREIGN KEY (product_id) REFERENCES products (id) ON DELETE CASCADE
 );
 
 CREATE INDEX idx_causal_data_store_id        ON causal_data (store_id);

@@ -163,9 +163,9 @@ Purpose: For each of the 9 segments, document what it is, whether it needs ML, a
 | date | orders | order_date |
 | item_id (transaction) | products | source_product_id |
 | quantity | order_items | quantity |
-| selling_price | order_items | net_sales_value |
+| selling_price | order_items | sales_value |
 | other_discount | order_items | other_discount |
-| coupon_discount | order_items | coupon_discount |
+| coupon_discount | order_items | coupon_disc |
 | brand | products | brand |
 | category | products | category |
 
@@ -173,17 +173,17 @@ Purpose: For each of the 9 segments, document what it is, whether it needs ML, a
 
 | Computed Feature | Formula | Attributes Used | How Computed |
 |---|---|---|---|
-| total_discount_received | `SUM(other_discount + coupon_discount)` | order_items.other_discount, order_items.coupon_discount | SQL SUM per customer |
-| discount_dependency_ratio | `SUM(other_discount + coupon_discount) / SUM(net_sales_value)` | order_items.other_discount, order_items.coupon_discount, order_items.net_sales_value | SQL SUM / SUM per customer |
+| total_discount_received | `SUM(other_discount + coupon_discount)` | order_items.other_discount, order_items.coupon_disc | SQL SUM per customer |
+| discount_dependency_ratio | `SUM(other_discount + coupon_discount) / SUM(sales_value)` | order_items.other_discount, order_items.coupon_disc, order_items.sales_value | SQL SUM / SUM per customer |
 | coupon_redemption_rate | `COUNT(redemption_status=1) / COUNT(*)` | coupon_redemptions.redemption_status | SQL COUNT per customer |
-| avg_discount_per_order | `AVG(other_discount + coupon_discount)` | order_items.other_discount, order_items.coupon_discount | SQL AVG per customer |
-| discount_order_frequency | `COUNT(orders with discount > 0) / COUNT(total orders)` | order_items.other_discount, order_items.coupon_discount | SQL COUNT per customer |
+| avg_discount_per_order | `AVG(other_discount + coupon_discount)` | order_items.other_discount, order_items.coupon_disc | SQL AVG per customer |
+| discount_order_frequency | `COUNT(orders with discount > 0) / COUNT(total orders)` | order_items.other_discount, order_items.coupon_disc | SQL COUNT per customer |
 
 **Not needed for this segment:** All demographics (age_range, marital_status, rented, family_size, no_of_children, income_bracket, brand_type)
 
 **Customers table stays at 12 columns. No changes needed.**
 
-**Verification needed:** Confirm whether `selling_price` is net (post-discount) or gross. If gross, `discount_dependency_ratio` will underestimate dependency. To verify: check if `selling_price + other_discount + coupon_discount` matches a known gross value, or compare with `coupon_discount` patterns in the data. If `selling_price` is gross, use `selling_price + other_discount + coupon_discount` as `net_sales_value` in all formulas.
+**Verification needed:** Confirm whether `selling_price` is net (post-discount) or gross. If gross, `discount_dependency_ratio` will underestimate dependency. To verify: check if `selling_price + other_discount + coupon_discount` matches a known gross value, or compare with `coupon_discount` patterns in the data. If `selling_price` is gross, use `selling_price + other_discount + coupon_discount` as `sales_value` in all formulas.
 
 ---
 
@@ -553,3 +553,16 @@ None needed. These are pre-computed features from the dataset, fed directly into
 ### Schema Changes Needed
 
 **None.** All attributes already exist in `events` table.
+
+
+## Ingestion clarification — 2026-10-21
+
+[The shared transformation contract](../data_transformation_notes/transformation-contract.md) governs all six populations. Real dates remain unchanged; only Dunnhumby uses its documented day-number anchor. Use a dataset-specific observation date for historical feature evaluation, not the machine's current date. Churn has no verified observation date or tenure unit and must not acquire invented purchase history.
+
+Segment 2's statement that no KPI uses geography is superseded: retain Country as orders.region for geography KPIs. Segment 3 uses canonical sales_value and coupon_disc; retain source selling_price and discount signs. The gross/net interpretation of coupon selling_price remains unverified, so financial ratios requiring that interpretation are unavailable. Coupon order containers are individual source rows, not true baskets.
+
+Segment 5 campaign UUIDs use (campaign_type, id), matched from (message_type, campaign_id); purchased_at is retained. Customer IDs are never matched across datasets. Native message flags are parsed explicitly, never with string truthiness.
+
+Segment 8 promotion fields are source codes, not Boolean flags. Retain all promotion occurrences; use a validated source-code predicate and EXISTS rather than a multiplying join. An unverified code predicate cannot support promo_response_rate.
+
+Segment 6 customer-by-product features remain platform work: do not collapse them arbitrarily into one customer row in transformation. No notebook computes ML features, scores, or predictions.

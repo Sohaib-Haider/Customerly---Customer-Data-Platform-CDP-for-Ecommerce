@@ -341,3 +341,18 @@ Channel preference metrics for the store owner. These track individual customer 
 | 2026-09-27 | Added Segment ML Scores category (13 cards) |
 | 2026-09-27 | Added Channel Preference category (4 cards) — final category |
 | 2026-09-27 | Dropped Causal/Promotion and Holiday categories — not feasible with current data |
+
+
+## Source-data feasibility rules — 2026-10-21
+
+These rules qualify the cards above for the six-dataset demo. See [the transformation contract](../data_transformation_notes/transformation-contract.md).
+
+- One tenant does not make six source populations comparable currencies or a single continuous observation window. Filter by source namespace and declare observation date and coverage. Cross-source financial totals remain unsupported until currency/unit equivalence is established.
+- sales_value retains source amounts. Dunnhumby is already net under its documented treatment; do not subtract its discounts again or label that value gross revenue. Coupon selling_price gross/net semantics remain unverified. Gross revenue and discount-rate cards requiring unobserved gross amounts must be unavailable, not inferred from a generic subtraction.
+- Coupon transaction lines have synthetic order containers. Exclude them from true basket-count and basket-AOV metrics. Retail and Dunnhumby have native invoice/basket IDs.
+- Retail Country populates region; missing regions in other populations remain unknown.
+- Message purchase outcomes and purchased_at do not identify retail orders or amounts. Revenue attribution across those populations is unavailable.
+- Churn snapshot attributes are read from customers, not nonexistent customer_features columns. They have no verified snapshot date; tenure is not converted to days.
+- Product-level replenishment features require a customer/product representation before those cards can be evaluated; the transforms do not manufacture a customer-level reduction.
+- Promotion matching uses EXISTS against source-store/product/week and a verified code interpretation, never a raw many-to-many join that multiplies revenue.
+- Catalog prices, signup dates, contact details and ML predictions stay absent when unsourced. Unsupported metrics must display unavailable with coverage, not zero.

@@ -1,27 +1,15 @@
-"""Shared id-namespace and calendar-offset helpers for the offline transform stage.
+"""Shared tenant-scoped identity and source-preserving parsing helpers.
 
-This module is the single source of truth for the two things every transform
-script must agree on:
-
-1.  Id namespacing — every source id is prefixed with the dataset's namespace so
-    ids from two different Kaggle datasets can never collide inside the same
-    canonical store (schema-blueprint.md principle 4, traceability back to source).
-2.  Date strategy — each dataset declares its own. Day-number sources align onto
-    their own documented anchor; real-date sources are shifted by a single auditable
-    window offset. See DATASET_ANCHORS below — deliberately not a global constant.
-
-Nothing else lives here. No column mappings, no taxonomy, no feature logic —
-those belong to the individual transform scripts.
-
-Reference: docs/notes/schema-notes/schema-blueprint.md (principles 3 and 4),
-docs/notes/customer segmentation-notes/segments-schema-mapping.md (per-segment
-anchor_date + (day_no - 1) offset), docs/submission/2.7-constraints.md (per-record
-offsets must be documented, not inferred).
+Real source dates retain offset zero. Only native day-number sources have a
+synthetic anchor. See docs/notes/data_transformation_notes/transformation-contract.md.
 """
 
 from __future__ import annotations
 
 import uuid
+import math
+from decimal import Decimal, InvalidOperation
+from contextvars import ContextVar
 from collections.abc import Iterable
 from datetime import date, datetime, time, timedelta, timezone
 
@@ -40,7 +28,19 @@ SOURCE_NAMESPACES = {
     "dunnhumby": "dnb",
     "behavior": "evb",
     "online_retail_ii": "ret",
+    "coupon": "cpn",
+    "churn": "chr",
+    "messaging": "msg",
 }
+
+DEMO_STORE_ID = str(uuid.uuid5(UUID_NAMESPACE, 'stores|customerly-demo'))
+DEMO_STORE_NAME = 'Customerly Demo Store'
+TENANT = ContextVar('transform_tenant', default=DEMO_STORE_ID)
+
+
+def set_tenant(store_id):
+    """Set tenant scope before mapping primary and foreign keys."""
+    TENANT.set(str(uuid.UUID(str(store_id))))
 
 # ---------------------------------------------------------------------------
 # Date strategy — PER DATASET, never global.
@@ -66,13 +66,8 @@ DATASET_ANCHORS = {
     # "online_retail_ii":    <not applicable — real InvoiceDate, use window_offset>
 }
 
-# Shared timeline for the two real-date datasets in Member B's scope. Both ship
-# real timestamps on very different native ranges (behaviour Oct–Nov 2019; Online
-# Retail II Dec 2009 – Dec 2011), so window_offset() maps each dataset's own
-# earliest date onto this one day. That puts both datasets on a single calendar
-# with their intervals intact, which is what "align dates to a shared timeline"
-# means for the end-to-end platform demo. Member C uses the same reference date.
-# A source with native day numbers (Dunnhumby) must NOT use this — see anchor_for().
+# Retained for compatibility with callers of explicit date-shift helpers.
+# Production transforms preserve real source dates and do not use this anchor.
 SHARED_WINDOW_START = date(2024, 1, 1)
 
 
@@ -103,10 +98,10 @@ def source_id(raw: object, dataset: str) -> str:
     if raw is None:
         return ""
     text = str(raw).strip()
-    if not text or text.lower() in {"nan", "none", "null"}:
+    if not text or text.lower() in {"nan", "none", "null", "<na>", "nat"}:
         return ""
     # pandas upcasts integer-looking id columns to float when any value is null
-    if text.endswith(".0"):
+    if not isinstance(raw, str) and text.endswith(".0"):
         stem = text[:-2]
         if stem.lstrip("-").isdigit():
             text = stem
@@ -115,13 +110,8 @@ def source_id(raw: object, dataset: str) -> str:
 
 
 def uid(table: str, key: str) -> str:
-    """Deterministic primary/foreign key for one canonical row.
-
-    Derived from (table, source key) only — deliberately NOT from store_id — so
-    the output keeps loading correctly even if the demo tenant's UUID is
-    regenerated at load time. Postgres UUID columns accept this string form.
-    """
-    return str(uuid.uuid5(UUID_NAMESPACE, f"{table}|{key}"))
+    """Deterministic UUID from tenant, entity table and dataset-qualified key."""
+    return str(uuid.uuid5(UUID_NAMESPACE, f"{TENANT.get()}|{table}|{key}"))
 
 
 def align_day(day_no: object, anchor: date) -> date | None:
@@ -176,7 +166,8 @@ def combine_timestamp(day: date | None, trans_time: object) -> datetime | None:
     tod = parse_trans_time(trans_time)
     if day is None or tod is None:
         return None
-    return datetime.combine(day, tod, tzinfo=timezone.utc)
+    # Source local wall time; the source does not identify a timezone.
+    return datetime.combine(day, tod)
 
 
 def parse_trans_time(raw: object) -> time | None:
@@ -202,6 +193,8 @@ def parse_trans_time(raw: object) -> time | None:
     # ("0955" read as an int becomes 955) -- HMM parses to the same wall clock
     # as the HHMM it was born from, so accepting it recovers the value instead
     # of dropping the order's timestamp entirely.
+    if len(text) <= 2:
+        text = text.zfill(4)
     if len(text) == 3:
         hour, minute, second = int(text[0:1]), int(text[1:3]), 0
     elif len(text) == 4:
@@ -218,23 +211,13 @@ def parse_trans_time(raw: object) -> time | None:
 
 
 def to_int(raw: object) -> int | None:
-    """Lenient int coercion for CSV columns pandas may have upcast to float."""
-    if raw is None:
-        return None
-    if isinstance(raw, bool):
-        return None
-    if isinstance(raw, (int,)):
-        return int(raw)
-    if isinstance(raw, float):
-        if raw != raw:  # NaN
-            return None
-        return int(raw)
-    text = str(raw).strip()
-    if not text or text.lower() in {"nan", "none", "null"}:
+    """Accept integral values only; never truncate a fractional quantity."""
+    if raw is None or isinstance(raw, bool):
         return None
     try:
-        return int(float(text))
-    except ValueError:
+        value = Decimal(str(raw).strip())
+        return int(value) if value.is_finite() and value == value.to_integral_value() else None
+    except (InvalidOperation, ValueError, OverflowError):
         return None
 
 
@@ -247,7 +230,7 @@ def to_float(raw: object) -> float | None:
         return None
     if isinstance(raw, (int, float)):
         value = float(raw)
-        return None if value != value else value  # NaN -> None
+        return value if math.isfinite(value) else None
     text = str(raw).strip()
     if not text or text.lower() in {"nan", "none", "null"}:
         return None
@@ -256,7 +239,7 @@ def to_float(raw: object) -> float | None:
         value = float(text)
     except ValueError:
         return None
-    return None if value != value else value
+    return value if math.isfinite(value) else None
 
 
 def to_bool(raw: object, default: bool | None = None) -> bool | None:

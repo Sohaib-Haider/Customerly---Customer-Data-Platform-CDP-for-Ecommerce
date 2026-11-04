@@ -37,6 +37,7 @@ import numpy as np
 import pandas as pd
 
 from common import (
+    DEMO_STORE_NAME, set_tenant,
     SHARED_WINDOW_START,
     SOURCE_NAMESPACES,
     source_id,  # kept for single-value callers; the bulk path uses _namespace
@@ -89,6 +90,7 @@ class TransformResult:
     dropped: dict[str, int] = field(default_factory=dict)
     dropped_by_source: dict[str, int] = field(default_factory=dict)
     raw_counts: dict[str, int] = field(default_factory=dict)
+    sampled_counts: dict[str, int] = field(default_factory=dict)
     events_written: int = 0
     events_violations: dict[str, int] = field(default_factory=dict)
 
@@ -124,7 +126,7 @@ def _namespace(series: pd.Series) -> pd.Series:
     chunk is handled in C instead of a Python lambda per row.
     """
     s = series.fillna("").astype(str).str.strip()
-    s = s.str.replace(r"^(\d+)\.0$", r"\1", regex=True)
+    s = s.mask(s.str.lower().isin(["nan", "none", "null", "<na>"]), "")
     return (PREFIX + s).where(s != "", "")
 
 
@@ -153,43 +155,39 @@ def _text_or_none(value):
 
 
 def resolve_raw_files(raw_dir) -> list[Path]:
-    """Return the two monthly source paths, accepting .csv or .csv.gz."""
     raw_dir = Path(raw_dir)
-    for candidate in (RAW_FILES, RAW_FILES_GZ):
-        paths = [raw_dir / name for name in candidate]
-        if all(p.exists() for p in paths):
-            return paths
-    found = [p for name in RAW_FILES + RAW_FILES_GZ if (p := raw_dir / name).exists()]
-    if not found:
-        raise FileNotFoundError(
-            f"No behaviour source files in {raw_dir}. Expected "
-            f"{' and '.join(RAW_FILES)} (or the .gz names). Download from "
-            "https://data.rees46.com/datasets/marketplace/ (2019-Oct.csv.gz, "
-            "2019-Nov.csv.gz) or Kaggle "
-            "mkechinov/ecommerce-behavior-data-from-multi-category-store."
-        )
-    return found
+    paths = []
+    for alternatives in zip(RAW_FILES, RAW_FILES_GZ):
+        found = next((raw_dir / n for n in alternatives if (raw_dir / n).is_file()), None)
+        if found is None:
+            raise FileNotFoundError(f"Missing configured month: {alternatives} in {raw_dir}")
+        paths.append(found)
+    return paths
 
 
 def compute_offset(raw_paths: list[Path], chunk_size: int) -> int:
-    """Days to add so this dataset's earliest event lands on SHARED_WINDOW_START.
+    """Real source timestamps are retained; no alignment scan is needed."""
+    return 0
 
-    One streaming pass over `event_time` only. The offset is computed once from
-    the dataset's own minimum and applied uniformly to every row — never inferred
-    per record (2.7-constraints.md).
+
+def session_sample_mask(chunk: pd.DataFrame, fraction: float, seed: int) -> pd.Series:
+    """Select whole customer sessions consistently across chunks and months.
+
+    Each session has the same inclusion probability, so the retained row share
+    is approximately fraction, not exactly fraction. No source rows are changed.
     """
-    min_ts = None
-    for path in raw_paths:
-        for chunk in pd.read_csv(
-            path, usecols=["event_time"], dtype=str, chunksize=chunk_size,
-            low_memory=False,
-        ):
-            parsed = _parse_times(chunk["event_time"]).min()
-            if pd.notna(parsed) and (min_ts is None or parsed < min_ts):
-                min_ts = parsed
-    if min_ts is None or pd.isna(min_ts):
-        raise ValueError("no parseable event_time found in the behaviour sources")
-    return (SHARED_WINDOW_START - min_ts.date()).days
+    if not 0 < fraction <= 1:
+        raise ValueError("sample_fraction must be greater than 0 and at most 1")
+    if not isinstance(seed, int) or not 0 <= seed < 2**64:
+        raise ValueError("sample_seed must be an integer in [0, 2**64)")
+    if fraction == 1:
+        return pd.Series(True, index=chunk.index)
+    keys = chunk[["user_id", "user_session"]].fillna("").astype(str)
+    keys = keys.apply(lambda column: column.str.strip())
+    hashes = pd.util.hash_pandas_object(
+        keys, index=False, hash_key=f"{seed:016x}",
+    )
+    return hashes < int(fraction * 2**64)
 
 
 # ---------------------------------------------------------------------------
@@ -203,6 +201,7 @@ def _map_chunk(
     offset: int,
     acc: dict,
     result: TransformResult,
+    source_positions=None,
 ) -> pd.DataFrame:
     """Map one chunk of raw events into canonical `events` rows + audit.
 
@@ -210,6 +209,7 @@ def _map_chunk(
     the running customer set and product catalog; `result` records every drop.
     """
     n = len(chunk)
+    positions = np.arange(n) if source_positions is None else np.asarray(source_positions)
     result.raw_counts[file_tag] = result.raw_counts.get(file_tag, 0) + n
 
     user = _namespace(chunk["user_id"])
@@ -219,7 +219,7 @@ def _map_chunk(
     # than turning them into the literal text "nan" before the empty check.
     etype = chunk["event_type"].fillna("").astype(str).str.strip()
     ts = _parse_times(chunk["event_time"])
-    price = pd.to_numeric(chunk["price"], errors="coerce")
+    price = chunk["price"]  # Preserve exact source decimals; validated before publication.
     cat_id = chunk.get("category_id")
     cat_code = chunk.get("category_code")
     brand = chunk.get("brand")
@@ -230,6 +230,19 @@ def _map_chunk(
     result.drop("events with empty event_type", int((etype == "").sum()), source=file_tag)
     result.drop("events with unparseable event_time", int(ts.isna().sum()), source=file_tag)
     keep = (user != "") & (sess != "") & (etype != "") & ts.notna()
+    result.dropped_by_source[file_tag] = result.dropped_by_source.get(file_tag, 0) - (
+        int((user == "").sum()) + int((sess == "").sum()) + int((etype == "").sum()) + int(ts.isna().sum())
+    ) + int((~keep).sum())
+    if not keep.all() and acc.get("exceptions_dir") is not None:
+        rejected = chunk.loc[~keep].copy()
+        rejected["source_row"] = base_index + positions[(~keep).to_numpy()]
+        rejected["exception_reason"] = ["; ".join(reason for bad, reason in (
+            (user.loc[i] == "", "missing user_id"), (sess.loc[i] == "", "missing session"),
+            (etype.loc[i] == "", "missing event_type"), (pd.isna(ts.loc[i]), "invalid timestamp")) if bad)
+            for i in rejected.index]
+        destination = acc["exceptions_dir"] / file_tag
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        rejected.to_csv(destination, mode="a", header=not destination.exists(), index=False)
 
     # ---- dimension accumulators, on the rows that survive -----------------
     ku = user[keep]
@@ -239,7 +252,7 @@ def _map_chunk(
     sub = pd.DataFrame({"p": prod[keep], "c": c_series, "b": b_series})
     sub = sub[sub["p"] != ""]
     if len(sub):
-        sub = sub.drop_duplicates(subset=["p"])
+        sub = sub.replace("", None).groupby("p", sort=False, as_index=False).first()
         for p, c, b in sub.itertuples(index=False):
             c = _text_or_none(c)
             b = _text_or_none(b)
@@ -271,8 +284,8 @@ def _map_chunk(
 
     # ---- deterministic ids -------------------------------------------------
     out = pd.DataFrame(index=chunk.index[keep])
-    idx = np.arange(base_index, base_index + len(out)).astype(str)
-    out["id"] = [uid("events", k) for k in np.char.add(f"{file_tag}|", idx)]
+    idx = (base_index + positions[keep.to_numpy()]).astype(str)
+    out["id"] = [uid("events", k) for k in np.char.add(f"evb:{file_tag}|", idx)]
     out["store_id"] = store_id
     out["customer_id"] = _uid_series(user, "customers")
     out["session_id"] = sess
@@ -303,38 +316,79 @@ def transform_stream(
     events_path: Path,
     offset: int,
     chunk_size: int = 1_000_000,
+    *,
+    sample_fraction: float = 1.0,
+    sample_seed: int = 42,
 ) -> dict[str, pd.DataFrame]:
     """Stream the source files into `events` on disk and build the dimensions.
+
+    Optional sampling keeps complete customer sessions before preprocessing,
+    without creating an intermediate copy. raw_counts counts all scanned rows;
+    sampled_counts counts selected input rows (before cleaning). Intentionally
+    unselected rows are not validation failures. Event IDs retain source offsets.
 
     Returns the in-memory frames for `stores`, `customers` and `products`. The
     `events` frame is not held — it is written incrementally to `events_path`.
     """
     import time
 
+    # Validate configuration even when a source file has no data rows.
+    session_sample_mask(pd.DataFrame(columns=["user_id", "user_session"]),
+                        sample_fraction, sample_seed)
+
+    set_tenant(store_id)
     acc = {"customers": set(), "products": {}}
     events_path = Path(events_path)
     events_path.parent.mkdir(parents=True, exist_ok=True)
+    acc["exceptions_dir"] = events_path.parent.parent / "exceptions"
 
     first_chunk = True
     base_index = 0
     written = 0
     started = time.time()
     for path in raw_paths:
-        file_tag = Path(path).name
+        base_index = 0
+        file_tag = Path(path).name.removesuffix(".gz")
+        result.raw_counts.setdefault(file_tag, 0)
+        result.sampled_counts.setdefault(file_tag, 0)
         print(f"    streaming {file_tag} ...", flush=True)
         for chunk in pd.read_csv(
-            path, dtype=str, chunksize=chunk_size, low_memory=False,
+            path, dtype=str, chunksize=chunk_size, low_memory=False, keep_default_na=False, na_values=[""],
         ):
-            mapped = _map_chunk(chunk, file_tag, base_index, store_id, offset, acc, result)
+            source_count = len(chunk)
+            selected = session_sample_mask(chunk, sample_fraction, sample_seed)
+            positions = np.flatnonzero(selected.to_numpy())
+            result.sampled_counts[file_tag] += len(positions)
+            # _map_chunk records selected rows; account for the rest here so
+            # raw_counts still represents the complete, unchanged source file.
+            result.raw_counts[file_tag] += source_count - len(positions)
+            if not len(positions):
+                base_index += source_count
+                continue
+            mapped = _map_chunk(chunk.loc[selected], file_tag, base_index,
+                                store_id, offset, acc, result,
+                                source_positions=positions)
             mapped.to_csv(
-                events_path, mode="a", header=first_chunk, index=False, na_rep=""
+                events_path, mode="w" if first_chunk else "a", header=first_chunk, index=False, na_rep=""
             )
             first_chunk = False
             written += len(mapped)
-            base_index += len(chunk)
+            base_index += source_count
             if base_index // chunk_size % 25 == 0:
                 print(f"      {base_index:,} rows read, {written:,} events, "
                       f"{time.time() - started:.0f}s", flush=True)
+
+        total = result.raw_counts[file_tag]
+        retained = result.sampled_counts[file_tag]
+        share = retained / total if total else 0
+        print(f"    {file_tag}: selected {retained:,}/{total:,} rows ({share:.2%})", flush=True)
+        result.note(f"{file_tag}: session sampling fraction={sample_fraction}, "
+                    f"seed={sample_seed}; scanned={total}, selected={retained}, "
+                    f"intentionally excluded={total - retained}. "
+                    "Selection precedes cleaning; UUIDs use original source row offsets.")
+
+    if first_chunk:
+        pd.DataFrame(columns=EVENT_COLUMNS).to_csv(events_path, index=False)
 
     result.events_written = written
     if not written:
@@ -350,13 +404,15 @@ def transform_stream(
         "customers/products dimensions were derived from the event rows so the "
         "events FKs resolve — see BEHAVIOR_AND_RETAIL.md §3"
     )
+    from contract import canonical
+    result.frames = {t: canonical(t, f, store_id) for t, f in result.frames.items()}
     return result.frames
 
 
 def _stores(store_id: str) -> pd.DataFrame:
     return pd.DataFrame([{
         "id": store_id,
-        "name": "Member B Demo Store",
+        "name": DEMO_STORE_NAME,
         "plan": "pro",
         "created_at": None,
         "updated_at": None,

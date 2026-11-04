@@ -1,3 +1,5 @@
+> **Current implementation (2026-10-21):** [Shared transformation contract v2](transformation-contract.md) supersedes earlier store IDs, per-file date shifts, output paths and deduplication descriptions below.
+
 # Data Transformation — Overall Approach
 
 **Scope:** Members A, B and C — six source datasets covering nine segments  
@@ -55,9 +57,13 @@ for these notebooks. KaggleHub still caches the original downloads locally.
 
 Run each notebook from top to bottom after installing
 `data_prep/transform/requirements.txt`. The notebooks process the complete configured
-source files, without fixture substitution or row sampling. Member B's behavior
-transform reads the assigned October and November files in chunks; this processes
-all their rows without loading the entire event history into memory. Member C uses
+source files, except for Member B's behavior data. Its notebook and command-line
+runner scan October and November in chunks and select whole customer sessions
+before preprocessing, targeting approximately 40% of rows from each file with seed
+42. Selection spans the complete source period and is repeatable across chunks
+and months; the actual row percentage varies with session sizes. Raw files remain
+unchanged, and no intermediate sampled CSVs are created. Other datasets are not
+downsampled. Member C uses
 the published `messages-demo.csv` specified in its brief; downloading the whole
 dataset does not turn that source file into a larger message history.
 

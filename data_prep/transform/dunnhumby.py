@@ -25,8 +25,10 @@ from dataclasses import dataclass, field
 from datetime import date
 
 import pandas as pd
+from contract import decimal_value, canonical
 
 from common import (
+    DEMO_STORE_NAME, set_tenant,
     align_day,
     anchor_for,
     combine_timestamp,
@@ -72,7 +74,7 @@ COLUMNS = {
         "first_purchase_date", "tenure", "warehouse_to_home",
         "number_of_devices_registered", "satisfaction_score", "complain",
         "days_since_last_order", "cashback_amount",
-        "preferred_order_category", "churn", "created_at", "updated_at",
+        "preferred_order_category", "email", "phone_number", "churn", "created_at", "updated_at",
     ],
     "products": [
         "id", "store_id", "source_product_id", "name", "brand", "category",
@@ -84,7 +86,7 @@ COLUMNS = {
         "created_at",
     ],
     "order_items": [
-        "id", "order_id", "product_id", "quantity", "unit_price",
+        "id", "order_id", "product_id", "quantity", "source_timestamp", "unit_price",
         "sales_value", "retail_disc", "coupon_disc", "coupon_match_disc",
         "other_discount",
     ],
@@ -114,6 +116,7 @@ class TransformResult:
     # which is how redemption drops leaked into the transaction line accounting.
     dropped_by_source: dict[str, int] = field(default_factory=dict)
     raw_counts: dict[str, int] = field(default_factory=dict)
+    exceptions: dict[str, pd.DataFrame] = field(default_factory=dict)
 
     def drop(self, reason: str, count: int, source: str = "transaction_data.csv") -> None:
         if count:
@@ -128,7 +131,7 @@ class TransformResult:
 # ---------------------------------------------------------------------------
 # loading
 # ---------------------------------------------------------------------------
-def load_raw(raw_dir) -> dict[str, pd.DataFrame]:
+def load_raw(raw_dir, *, stream_causal=False) -> dict[str, pd.DataFrame]:
     """Read every expected source CSV, keeping source column names intact."""
     from pathlib import Path
 
@@ -162,7 +165,8 @@ def load_raw(raw_dir) -> dict[str, pd.DataFrame]:
         name: pd.read_csv(
             raw_dir / name,
             low_memory=False,
-            dtype=dtypes.get(name),
+            dtype=str, keep_default_na=False, na_values=[""],
+            nrows=0 if stream_causal and name == 'causal_data.csv' else None,
         )
         for name in RAW_FILES
     }
@@ -188,8 +192,9 @@ def _products(raw: dict[str, pd.DataFrame], result: TransformResult) -> pd.DataF
     frame = frame[~bad]
 
     dupes = int(frame["_key"].duplicated().sum())
-    result.drop("duplicate PRODUCT_ID rows (kept first)", dupes, source="product.csv")
-    frame = frame.drop_duplicates(subset="_key", keep="first")
+    if dupes:
+        result.note("Duplicate PRODUCT_ID rows retained for validation")
+    # Preserve duplicate source identities; validator reports conflicting dimension rows.
 
     out = pd.DataFrame(index=frame.index)
     out["id"] = frame["_key"].map(lambda k: uid("products", k))
@@ -241,7 +246,7 @@ def _customers(raw: dict[str, pd.DataFrame], result: TransformResult) -> pd.Data
     tx_keys = tx_keys[tx_keys != ""]
     demo_keys = demo_keys[demo_keys != ""]
 
-    keys = sorted(set(tx_keys) | set(demo_keys))
+    keys = sorted(set(tx_keys) | set(demo_keys) | {source_id(v, DATASET) for name in ("coupon_redempt.csv", "campaign_table.csv") for v in raw[name]["household_key"] if source_id(v, DATASET)})
     only_demo = len(set(demo_keys) - set(tx_keys))
     if only_demo:
         result.note(
@@ -286,9 +291,6 @@ def _orders_and_items(
         raise KeyError(f"transaction_data.csv missing expected columns: {missing_cols}")
 
     frame = tx.copy()
-    for col in needed:
-        if col not in {"household_key"}:
-            pass
     frame["_basket"] = frame["BASKET_ID"].map(lambda v: source_id(v, DATASET))
     frame["_product"] = frame["PRODUCT_ID"].map(lambda v: source_id(v, DATASET))
     frame["_customer"] = frame["household_key"].map(lambda v: source_id(v, DATASET))
@@ -315,6 +317,9 @@ def _orders_and_items(
 
     # ---- orders: one row per basket -------------------------------------
     grp = frame.groupby("_basket", sort=False)
+    for col in ("_customer", "DAY", "WEEK_NO", "STORE_ID"):
+        if col in frame and grp[col].nunique(dropna=False).gt(1).any():
+            raise ValueError(f"Conflicting basket header {col}; source rows remain in raw; no publication")
     header = pd.DataFrame({
         "_basket": list(grp.groups.keys()),
         "_customer": grp["_customer"].first().values,
@@ -329,10 +334,13 @@ def _orders_and_items(
     header["order_timestamp"] = [
         combine_timestamp(d, t) for d, t in zip(header["_day"].map(_align), header["_time"])
     ]
+    if "TRANS_TIME" in frame:
+        ambiguous_time = grp["TRANS_TIME"].nunique(dropna=False).gt(1)
+        header.loc[header["_basket"].isin(ambiguous_time[ambiguous_time].index), "order_timestamp"] = None
     header["week_no"] = header["_week"].map(to_int)
     header["day_no"] = header["_day"].map(to_int)
     header["source_order_id"] = header["_basket"]
-    header["source_store_id"] = header["_store"].map(to_int)
+    header["source_store_id"] = header["_store"].map(lambda v: source_id(v, "") or None)
     header["region"] = None  # Open Decision #4: no geo column in this dataset
     header["created_at"] = None  # set by the application, not the transform
 
@@ -348,27 +356,25 @@ def _orders_and_items(
     # ---- order_items: one row per transaction line ----------------------
     frame["_line_no"] = frame.groupby(["_basket", "_product"]).cumcount()
     items = frame.copy()
-    items["id"] = [
-        uid("order_items", f"{b}|{p}|{n}")
-        for b, p, n in zip(items["_basket"], items["_product"], items["_line_no"])
-    ]
+    items["id"] = [uid("order_items", f"dnb:transaction_data.csv|{i}") for i in items.index]
     items["order_id"] = items["_basket"].map(lambda k: uid("orders", k))
     items["product_id"] = items["_product"].map(lambda k: uid("products", k))
     items["quantity"] = items["QUANTITY"].map(to_int)
-    items["sales_value"] = items["SALES_VALUE"].map(to_float)
-    items["retail_disc"] = items["RETAIL_DISC"].map(to_float) if "RETAIL_DISC" in items else 0.0
-    items["coupon_disc"] = items["COUPON_DISC"].map(to_float) if "COUPON_DISC" in items else 0.0
+    items["source_timestamp"] = [combine_timestamp(_align(d), t) for d, t in zip(items["DAY"], items.get("TRANS_TIME", pd.Series(None, index=items.index)))]
+    items["sales_value"] = items["SALES_VALUE"].map(decimal_value)
+    items["retail_disc"] = items["RETAIL_DISC"].map(decimal_value) if "RETAIL_DISC" in items else 0.0
+    items["coupon_disc"] = items["COUPON_DISC"].map(decimal_value) if "COUPON_DISC" in items else 0.0
     items["coupon_match_disc"] = (
-        items["COUPON_MATCH_DISC"].map(to_float) if "COUPON_MATCH_DISC" in items else 0.0
+        items["COUPON_MATCH_DISC"].map(decimal_value) if "COUPON_MATCH_DISC" in items else 0.0
     )
     items["other_discount"] = 0.0  # no source column in this dataset
 
     # SALES_VALUE is already the NET amount for this source (segments-schema-mapping
     # Segment 2 pricing note): do not subtract RETAIL_DISC/COUPON_MATCH_DISC again.
-    # order_items.unit_price is NOT NULL but this source has no unit price column,
+    # The source has no unit price column; unknown per-unit prices remain NULL,
     # so it is derived as sales_value / quantity (net per-unit). FLAGGED.
     items["unit_price"] = [
-        round(s / q, 4) if (s is not None and q not in (None, 0)) else 0.0
+        s / decimal_value(q) if (s is not None and decimal_value(q) not in (None, 0)) else None
         for s, q in zip(items["sales_value"], items["quantity"])
     ]
 
@@ -405,11 +411,14 @@ def _causal_data(
     """
     src = raw["causal_data.csv"]
     result.raw_counts["causal_data.csv"] = len(src)
+    if src.empty:
+        # The notebook loads only headers here; full rows are streamed later.
+        return pd.DataFrame(columns=[c for c in COLUMNS["causal_data"] if c != "store_id"])
 
     frame = src.copy()
     frame["_product"] = frame["PRODUCT_ID"].map(lambda v: source_id(v, DATASET))
     frame["_week"] = frame["WEEK_NO"].map(to_int)
-    frame["_store"] = frame["STORE_ID"].map(to_int)
+    frame["_store"] = frame["STORE_ID"].map(lambda v: source_id(v, "") or None)
 
     result.drop("causal rows with empty PRODUCT_ID", int((frame["_product"] == "").sum()), source="causal_data.csv")
     result.drop("causal rows with missing STORE_ID (NOT NULL)", int(frame["STORE_ID"].map(empty_string).sum()), source="causal_data.csv")
@@ -425,19 +434,8 @@ def _causal_data(
     result.drop("causal rows whose product is absent from product.csv", int(orphan.sum()), source="causal_data.csv")
     frame = frame[~orphan]
 
-    before = len(frame)
-    frame = frame.drop_duplicates(subset=["_store", "_product", "_week"], keep="first")
-    result.drop(
-        "causal rows violating UNIQUE(store, source_store, product, week)",
-        before - len(frame),
-        source="causal_data.csv",
-    )
-
     out = pd.DataFrame(index=frame.index)
-    out["id"] = [
-        uid("causal_data", f"{s}|{p}|{w}")
-        for s, p, w in zip(frame["_store"], frame["_product"], frame["_week"])
-    ]
+    out["id"] = [uid("causal_data", f"dnb:causal_data.csv|{i}") for i in frame.index]
     out["product_id"] = frame["_product"].map(lambda k: uid("products", k))
     out["source_store_id"] = frame["_store"]
     out["week_no"] = frame["_week"]
@@ -462,8 +460,8 @@ def _coupon_campaigns(raw: dict[str, pd.DataFrame], result: TransformResult) -> 
     frame = frame[frame["_key"] != ""].copy()
 
     before = len(frame)
-    frame = frame.drop_duplicates(subset="_key", keep="first")
-    result.drop("duplicate CAMPAIGN rows (kept first)", before - len(frame), source="campaign_desc.csv")
+    # Preserve duplicate source identities; validator reports conflicting dimension rows.
+
 
     frame["_start"] = frame["START_DAY"].map(_align)
     frame["_end"] = frame["END_DAY"].map(_align)
@@ -519,19 +517,8 @@ def _coupon_redemptions(
     result.drop("redemptions whose household is absent from customers", int(orphan_cust.sum()), source="coupon_redempt.csv")
     frame = frame[~orphan_cust]
 
-    before = len(frame)
-    frame = frame.drop_duplicates(subset=["_customer", "_coupon", "_campaign"], keep="first")
-    result.drop(
-        "duplicate (customer, coupon, campaign) redemptions",
-        before - len(frame),
-        source="coupon_redempt.csv",
-    )
-
     out = pd.DataFrame(index=frame.index)
-    out["id"] = [
-        uid("coupon_redemptions", f"{c}|{p}|{m}")
-        for c, p, m in zip(frame["_customer"], frame["_coupon"], frame["_campaign"])
-    ]
+    out["id"] = [uid("coupon_redemptions", f"dnb:coupon_redempt.csv|{i}") for i in frame.index]
     out["coupon_id"] = frame["_coupon"]
     out["campaign_id"] = frame["_campaign"].map(lambda k: camp_ids.get(k))
     out["customer_id"] = frame["_customer"].map(lambda k: cust_ids.get(k))
@@ -549,7 +536,7 @@ def _stores(store_id: str) -> pd.DataFrame:
     """
     return pd.DataFrame([{
         "id": store_id,
-        "name": "Dunnhumby Demo Store",
+        "name": DEMO_STORE_NAME,
         "plan": "pro",
         "created_at": None,
         "updated_at": None,
@@ -561,6 +548,7 @@ def _stores(store_id: str) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 def transform(raw: dict[str, pd.DataFrame], store_id: str) -> TransformResult:
     """Run every Dunnhumby transform and return canonical frames + audit trail."""
+    set_tenant(store_id)
     result = TransformResult()
 
     products = _products(raw, result)
@@ -599,7 +587,48 @@ def transform(raw: dict[str, pd.DataFrame], store_id: str) -> TransformResult:
         "campaign_table.csv (DESCRIPTION, household_key, CAMPAIGN) NOT emitted — this is "
         "campaign *exposure*, not redemption; no canonical table holds 'customer was targeted'"
     )
+    for source, table in [("transaction_data.csv", "order_items"),
+                          ("causal_data.csv", "causal_data"), ("coupon_redempt.csv", "coupon_redemptions")]:
+        # Frame indices retain physical source-row positions through filtering.
+        # Do not hash every source row a second time just for reconciliation.
+        emitted = set(result.frames[table].index)
+        missing = [i for i in raw[source].index if i not in emitted]
+        if missing:
+            rejected = raw[source].loc[missing].copy()
+            rejected["source_row"] = rejected.index
+            rejected["exception_reason"] = "Not representable in canonical output; see source-specific audit reasons"
+            result.exceptions[source] = rejected
+        result.dropped_by_source[source] = len(missing)
+    result.frames = {t: canonical(t, f, store_id) for t, f in result.frames.items()}
     return result
+
+
+def stream_causal(raw_dir, products, store_id, target, result, chunk_size=250_000):
+    """Preserve promotion occurrences without materializing the full file."""
+    from pathlib import Path
+    set_tenant(store_id)
+    target = Path(target)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    total = written = 0
+    for chunk in pd.read_csv(Path(raw_dir) / 'causal_data.csv', dtype=str,
+                             keep_default_na=False, na_values=[''], chunksize=chunk_size):
+        mapped = _causal_data({'causal_data.csv': chunk}, products, result)
+        rejected = chunk.loc[~chunk.index.isin(mapped.index)].copy()
+        if len(rejected):
+            rejected['source_row'] = rejected.index
+            rejected['exception_reason'] = 'Unrepresentable promotion key/product; see source-specific audit'
+            destination = target.parent.parent / 'exceptions' / 'causal_data-source.csv'
+            destination.parent.mkdir(exist_ok=True)
+            rejected.to_csv(destination, mode='a', header=not destination.exists(), index=False)
+        out = canonical('causal_data', _attach_store(mapped, store_id), store_id)
+        out.to_csv(target, mode='w' if total == 0 else 'a', header=total == 0, index=False)
+        total += len(chunk)
+        written += len(out)
+    if total == 0:
+        canonical('causal_data', pd.DataFrame(), store_id).to_csv(target, index=False)
+    result.raw_counts['causal_data.csv'] = total
+    result.dropped_by_source['causal_data.csv'] = total - written
+    return written
 
 
 def _attach_store(frame: pd.DataFrame, store_id: str) -> pd.DataFrame:
