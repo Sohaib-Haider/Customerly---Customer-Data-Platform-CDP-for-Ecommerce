@@ -1,0 +1,542 @@
+{
+  "schema": "column_mapping/v1",
+  "generated_at": "2026-10-22T06:28:10+00:00",
+  "source": {
+    "file_name": "store_upload_sample.csv",
+    "row_count": 8,
+    "columns": [
+      "hh_id",
+      "ticket_no",
+      "txn_day",
+      "week_no",
+      "store_no",
+      "prod_sku",
+      "item_desc",
+      "dept_name",
+      "units_sold",
+      "net_sales",
+      "retail_promo_amt",
+      "coupon_amt",
+      "price",
+      "tx_time",
+      "cust_mail",
+      "loyalty_pts",
+      "zzz_internal_flag"
+    ]
+  },
+  "source_profile": {
+    "kind_detection": {
+      "primary_kind": "transactions",
+      "override_kind": null,
+      "effective_kind": "transactions",
+      "review_required": true,
+      "scores": {
+        "coupons": 0.059,
+        "customers": 0.059,
+        "products": 0.176,
+        "transactions": 0.353
+      },
+      "column_kinds": {
+        "hh_id": "unknown",
+        "ticket_no": "transactions",
+        "txn_day": "transactions",
+        "week_no": "transactions",
+        "store_no": "transactions",
+        "prod_sku": "products",
+        "item_desc": "products",
+        "dept_name": "products",
+        "units_sold": "transactions",
+        "net_sales": "transactions",
+        "retail_promo_amt": "unknown",
+        "coupon_amt": "coupons",
+        "price": "unknown",
+        "tx_time": "unknown",
+        "cust_mail": "unknown",
+        "loyalty_pts": "customers",
+        "zzz_internal_flag": "unknown"
+      }
+    },
+    "column_profiles": [
+      {
+        "name": "hh_id",
+        "dtype": "string",
+        "null_count": 0,
+        "distinct_count": 4,
+        "formats": [],
+        "likely_pii": false
+      },
+      {
+        "name": "ticket_no",
+        "dtype": "integer",
+        "null_count": 0,
+        "distinct_count": 4,
+        "formats": [
+          "integer"
+        ],
+        "likely_pii": false
+      },
+      {
+        "name": "txn_day",
+        "dtype": "date",
+        "null_count": 0,
+        "distinct_count": 4,
+        "formats": [
+          "date_yyyy_mm_dd"
+        ],
+        "likely_pii": false
+      },
+      {
+        "name": "week_no",
+        "dtype": "integer",
+        "null_count": 0,
+        "distinct_count": 2,
+        "formats": [
+          "integer"
+        ],
+        "likely_pii": false
+      },
+      {
+        "name": "store_no",
+        "dtype": "integer",
+        "null_count": 0,
+        "distinct_count": 3,
+        "formats": [
+          "integer"
+        ],
+        "likely_pii": false
+      },
+      {
+        "name": "prod_sku",
+        "dtype": "string",
+        "null_count": 0,
+        "distinct_count": 6,
+        "formats": [],
+        "likely_pii": false
+      },
+      {
+        "name": "item_desc",
+        "dtype": "string",
+        "null_count": 0,
+        "distinct_count": 6,
+        "formats": [],
+        "likely_pii": false
+      },
+      {
+        "name": "dept_name",
+        "dtype": "string",
+        "null_count": 0,
+        "distinct_count": 5,
+        "formats": [],
+        "likely_pii": true
+      },
+      {
+        "name": "units_sold",
+        "dtype": "integer",
+        "null_count": 0,
+        "distinct_count": 3,
+        "formats": [
+          "integer"
+        ],
+        "likely_pii": false
+      },
+      {
+        "name": "net_sales",
+        "dtype": "decimal",
+        "null_count": 0,
+        "distinct_count": 8,
+        "formats": [
+          "decimal"
+        ],
+        "likely_pii": false
+      },
+      {
+        "name": "retail_promo_amt",
+        "dtype": "decimal",
+        "null_count": 0,
+        "distinct_count": 4,
+        "formats": [
+          "decimal"
+        ],
+        "likely_pii": false
+      },
+      {
+        "name": "coupon_amt",
+        "dtype": "decimal",
+        "null_count": 0,
+        "distinct_count": 3,
+        "formats": [
+          "decimal"
+        ],
+        "likely_pii": false
+      },
+      {
+        "name": "price",
+        "dtype": "decimal",
+        "null_count": 0,
+        "distinct_count": 6,
+        "formats": [
+          "decimal"
+        ],
+        "likely_pii": false
+      },
+      {
+        "name": "tx_time",
+        "dtype": "datetime",
+        "null_count": 0,
+        "distinct_count": 4,
+        "formats": [
+          "iso_datetime"
+        ],
+        "likely_pii": false
+      },
+      {
+        "name": "cust_mail",
+        "dtype": "string",
+        "null_count": 0,
+        "distinct_count": 4,
+        "formats": [
+          "email_like"
+        ],
+        "likely_pii": true
+      },
+      {
+        "name": "loyalty_pts",
+        "dtype": "integer",
+        "null_count": 0,
+        "distinct_count": 4,
+        "formats": [
+          "integer"
+        ],
+        "likely_pii": false
+      },
+      {
+        "name": "zzz_internal_flag",
+        "dtype": "string",
+        "null_count": 0,
+        "distinct_count": 2,
+        "formats": [],
+        "likely_pii": false
+      }
+    ]
+  },
+  "llm": {
+    "model": "gemini-3.5-flash-lite",
+    "used": true,
+    "columns_sent": 15,
+    "invalid_discarded": 0,
+    "dataset_kind_opinion": "transactions",
+    "error": null
+  },
+  "mappings": [
+    {
+      "source_column": "week_no",
+      "target_table": "orders",
+      "target_column": "week_no",
+      "method": "exact",
+      "status": "suggested",
+      "confidence": null,
+      "explanation": "Exact match: source name equals canonical column orders.week_no ([S], SMALLINT).",
+      "requires": [],
+      "decision_note": null,
+      "alternate_targets": [],
+      "candidates": [],
+      "review_note": null,
+      "corrected_from": null
+    },
+    {
+      "source_column": "price",
+      "target_table": "order_items",
+      "target_column": "unit_price",
+      "method": "alias",
+      "status": "suggested",
+      "confidence": null,
+      "explanation": "Documented alias: segments-schema-mapping.md L105.",
+      "requires": [],
+      "decision_note": null,
+      "alternate_targets": [],
+      "candidates": [],
+      "review_note": null,
+      "corrected_from": null
+    },
+    {
+      "source_column": "hh_id",
+      "target_table": "orders",
+      "target_column": "customer_id",
+      "method": "llm",
+      "status": "needs_review",
+      "confidence": 0.8,
+      "explanation": "Household ID represents the customer in this transaction context.",
+      "requires": [
+        "relationship_resolution"
+      ],
+      "decision_note": null,
+      "alternate_targets": [],
+      "candidates": [],
+      "review_note": null,
+      "corrected_from": null
+    },
+    {
+      "source_column": "ticket_no",
+      "target_table": "orders",
+      "target_column": "source_order_id",
+      "method": "llm",
+      "status": "suggested",
+      "confidence": 0.85,
+      "explanation": "Ticket number maps strongly to the original order ID. Documented: segments-schema-mapping.md L320 (ESSENTIAL).",
+      "requires": [],
+      "decision_note": null,
+      "alternate_targets": [
+        {
+          "target_table": "order_items",
+          "target_column": "order_id",
+          "requires": [
+            "relationship_resolution"
+          ],
+          "citation": "DUNNHUMBY.md L212: order_items keys are (BASKET_ID, PRODUCT_ID, occurrence)"
+        }
+      ],
+      "candidates": [],
+      "review_note": null,
+      "corrected_from": null
+    },
+    {
+      "source_column": "txn_day",
+      "target_table": "orders",
+      "target_column": "order_date",
+      "method": "llm",
+      "status": "suggested",
+      "confidence": 0.85,
+      "explanation": "Transaction day maps to the order date. Documented: segments-schema-mapping.md L101.",
+      "requires": [],
+      "decision_note": null,
+      "alternate_targets": [],
+      "candidates": [],
+      "review_note": null,
+      "corrected_from": null
+    },
+    {
+      "source_column": "store_no",
+      "target_table": "orders",
+      "target_column": "source_store_id",
+      "method": "llm",
+      "status": "needs_review",
+      "confidence": 0.85,
+      "explanation": "Store number maps to the source store ID. Documented: DUNNHUMBY.md L121 (mapping L327 says orders.store_id; schema.sql renamed it source_store_id).",
+      "requires": [],
+      "decision_note": "Open Decision #3: segments-schema-mapping.md L327/L456 names the target orders.store_id (collides with the tenant FK); schema.sql emits source_store_id. Target follows schema.sql — reviewer must confirm before use.",
+      "alternate_targets": [
+        {
+          "target_table": "causal_data",
+          "target_column": "source_store_id",
+          "requires": [],
+          "citation": "DUNNHUMBY.md L159: STORE_ID -> causal_data.source_store_id"
+        }
+      ],
+      "candidates": [],
+      "review_note": null,
+      "corrected_from": null
+    },
+    {
+      "source_column": "prod_sku",
+      "target_table": "products",
+      "target_column": "source_product_id",
+      "method": "llm",
+      "status": "suggested",
+      "confidence": 0.85,
+      "explanation": "Product SKU maps to original product identifier. Documented: segments-schema-mapping.md L323 (ESSENTIAL); behavior.py derives the products dimension from event product_id.",
+      "requires": [],
+      "decision_note": null,
+      "alternate_targets": [
+        {
+          "target_table": "order_items",
+          "target_column": "product_id",
+          "requires": [
+            "relationship_resolution"
+          ],
+          "citation": "DUNNHUMBY.md L212"
+        },
+        {
+          "target_table": "causal_data",
+          "target_column": "product_id",
+          "requires": [
+            "relationship_resolution"
+          ],
+          "citation": "DUNNHUMBY.md L158"
+        }
+      ],
+      "candidates": [],
+      "review_note": null,
+      "corrected_from": null
+    },
+    {
+      "source_column": "item_desc",
+      "target_table": "products",
+      "target_column": "name",
+      "method": "llm",
+      "status": "suggested",
+      "confidence": 0.85,
+      "explanation": "Item description maps to product name. Documented: segments-schema-mapping.md L103.",
+      "requires": [],
+      "decision_note": null,
+      "alternate_targets": [],
+      "candidates": [],
+      "review_note": null,
+      "corrected_from": null
+    },
+    {
+      "source_column": "dept_name",
+      "target_table": "products",
+      "target_column": "department",
+      "method": "llm",
+      "status": "suggested",
+      "confidence": 0.85,
+      "explanation": "Department name maps to product department. Documented: segments-schema-mapping.md L328 (MODERATE).",
+      "requires": [],
+      "decision_note": null,
+      "alternate_targets": [],
+      "candidates": [],
+      "review_note": null,
+      "corrected_from": null
+    },
+    {
+      "source_column": "units_sold",
+      "target_table": "order_items",
+      "target_column": "quantity",
+      "method": "llm",
+      "status": "suggested",
+      "confidence": 0.9,
+      "explanation": "Units sold maps directly to item quantity. Documented: segments-schema-mapping.md L324/L104 (ESSENTIAL).",
+      "requires": [],
+      "decision_note": null,
+      "alternate_targets": [],
+      "candidates": [],
+      "review_note": null,
+      "corrected_from": null
+    },
+    {
+      "source_column": "net_sales",
+      "target_table": "order_items",
+      "target_column": "sales_value",
+      "method": "llm",
+      "status": "suggested",
+      "confidence": 0.9,
+      "explanation": "Net sales maps directly to sales value. Documented: segments-schema-mapping.md L325 (STRONG).",
+      "requires": [],
+      "decision_note": null,
+      "alternate_targets": [],
+      "candidates": [],
+      "review_note": null,
+      "corrected_from": null
+    },
+    {
+      "source_column": "retail_promo_amt",
+      "target_table": "order_items",
+      "target_column": "retail_disc",
+      "method": "llm",
+      "status": "needs_review",
+      "confidence": 0.8,
+      "explanation": "Retail promotion amount maps to retail discount. Documented: DUNNHUMBY.md L126 (carried: schema needs it).",
+      "requires": [],
+      "decision_note": null,
+      "alternate_targets": [],
+      "candidates": [],
+      "review_note": null,
+      "corrected_from": null
+    },
+    {
+      "source_column": "coupon_amt",
+      "target_table": "order_items",
+      "target_column": "coupon_disc",
+      "method": "llm",
+      "status": "needs_review",
+      "confidence": 0.8,
+      "explanation": "Coupon amount maps to coupon discount. Documented: DUNNHUMBY.md L127.",
+      "requires": [],
+      "decision_note": null,
+      "alternate_targets": [],
+      "candidates": [],
+      "review_note": null,
+      "corrected_from": null
+    },
+    {
+      "source_column": "tx_time",
+      "target_table": "orders",
+      "target_column": "order_timestamp",
+      "method": "llm",
+      "status": "needs_review",
+      "confidence": 0.85,
+      "explanation": "Transaction time maps to order timestamp. Documented: DUNNHUMBY.md L122: DAY + TRANS_TIME (4-digit HHMM) combined.",
+      "requires": [
+        "calculation"
+      ],
+      "decision_note": null,
+      "alternate_targets": [],
+      "candidates": [],
+      "review_note": null,
+      "corrected_from": null
+    },
+    {
+      "source_column": "cust_mail",
+      "target_table": "customers",
+      "target_column": "email",
+      "method": "llm",
+      "status": "suggested",
+      "confidence": 0.9,
+      "explanation": "Customer mail corresponds to email address.",
+      "requires": [],
+      "decision_note": null,
+      "alternate_targets": [],
+      "candidates": [],
+      "review_note": null,
+      "corrected_from": null
+    },
+    {
+      "source_column": "loyalty_pts",
+      "target_table": null,
+      "target_column": null,
+      "method": "none",
+      "status": "unmapped",
+      "confidence": null,
+      "explanation": "No direct canonical target for loyalty points. Left unmapped — no target invented.",
+      "requires": [],
+      "decision_note": null,
+      "alternate_targets": [],
+      "candidates": [],
+      "review_note": null,
+      "corrected_from": null
+    },
+    {
+      "source_column": "zzz_internal_flag",
+      "target_table": null,
+      "target_column": null,
+      "method": "none",
+      "status": "unmapped",
+      "confidence": null,
+      "explanation": "Internal flag has no matching canonical target. Left unmapped — no target invented.",
+      "requires": [],
+      "decision_note": null,
+      "alternate_targets": [],
+      "candidates": [],
+      "review_note": null,
+      "corrected_from": null
+    }
+  ],
+  "summary": {
+    "columns": 17,
+    "by_status": {
+      "suggested": 10,
+      "needs_review": 5,
+      "approved": 0,
+      "rejected": 0,
+      "unmapped": 2
+    },
+    "by_method": {
+      "exact": 1,
+      "alias": 1,
+      "llm": 13,
+      "manual": 0,
+      "none": 2
+    },
+    "direct_applicable": 0
+  }
+}

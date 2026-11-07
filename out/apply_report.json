@@ -1,0 +1,132 @@
+{
+  "input_csv": "column_mapping\\samples\\store_upload_sample.csv",
+  "output_dir": "out",
+  "mapping_document": "reviewed_mapping.json",
+  "row_count": 8,
+  "applied": [],
+  "skipped": [
+    {
+      "source_column": "week_no",
+      "status": "suggested",
+      "target_table": "orders",
+      "target_column": "week_no",
+      "reason": "not_approved (status=suggested)"
+    },
+    {
+      "source_column": "price",
+      "status": "suggested",
+      "target_table": "order_items",
+      "target_column": "unit_price",
+      "reason": "not_approved (status=suggested)"
+    },
+    {
+      "source_column": "hh_id",
+      "status": "needs_review",
+      "target_table": null,
+      "target_column": null,
+      "reason": "no_target (left unmapped)"
+    },
+    {
+      "source_column": "ticket_no",
+      "status": "needs_review",
+      "target_table": null,
+      "target_column": null,
+      "reason": "no_target (left unmapped)"
+    },
+    {
+      "source_column": "txn_day",
+      "status": "needs_review",
+      "target_table": null,
+      "target_column": null,
+      "reason": "no_target (left unmapped)"
+    },
+    {
+      "source_column": "store_no",
+      "status": "needs_review",
+      "target_table": null,
+      "target_column": null,
+      "reason": "no_target (left unmapped)"
+    },
+    {
+      "source_column": "prod_sku",
+      "status": "needs_review",
+      "target_table": null,
+      "target_column": null,
+      "reason": "no_target (left unmapped)"
+    },
+    {
+      "source_column": "item_desc",
+      "status": "needs_review",
+      "target_table": null,
+      "target_column": null,
+      "reason": "no_target (left unmapped)"
+    },
+    {
+      "source_column": "dept_name",
+      "status": "needs_review",
+      "target_table": null,
+      "target_column": null,
+      "reason": "no_target (left unmapped)"
+    },
+    {
+      "source_column": "units_sold",
+      "status": "needs_review",
+      "target_table": null,
+      "target_column": null,
+      "reason": "no_target (left unmapped)"
+    },
+    {
+      "source_column": "net_sales",
+      "status": "needs_review",
+      "target_table": null,
+      "target_column": null,
+      "reason": "no_target (left unmapped)"
+    },
+    {
+      "source_column": "retail_promo_amt",
+      "status": "needs_review",
+      "target_table": null,
+      "target_column": null,
+      "reason": "no_target (left unmapped)"
+    },
+    {
+      "source_column": "coupon_amt",
+      "status": "needs_review",
+      "target_table": null,
+      "target_column": null,
+      "reason": "no_target (left unmapped)"
+    },
+    {
+      "source_column": "tx_time",
+      "status": "needs_review",
+      "target_table": null,
+      "target_column": null,
+      "reason": "no_target (left unmapped)"
+    },
+    {
+      "source_column": "cust_mail",
+      "status": "needs_review",
+      "target_table": null,
+      "target_column": null,
+      "reason": "no_target (left unmapped)"
+    },
+    {
+      "source_column": "loyalty_pts",
+      "status": "needs_review",
+      "target_table": null,
+      "target_column": null,
+      "reason": "no_target (left unmapped)"
+    },
+    {
+      "source_column": "zzz_internal_flag",
+      "status": "needs_review",
+      "target_table": null,
+      "target_column": null,
+      "reason": "no_target (left unmapped)"
+    }
+  ],
+  "conflicts": [],
+  "output_files": [],
+  "applied_at": "2026-10-22T06:20:08+00:00",
+  "schema": "column_mapping_apply/v1"
+}
