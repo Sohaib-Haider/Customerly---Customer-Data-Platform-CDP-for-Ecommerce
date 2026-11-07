@@ -1,0 +1,5 @@
+# Runtime dependency (official Google GenAI SDK; pulls pydantic itself).
+google-genai>=1.50
+
+# Test dependency.
+pytest>=8.0
