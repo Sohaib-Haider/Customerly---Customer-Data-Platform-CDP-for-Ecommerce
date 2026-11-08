@@ -86,10 +86,27 @@ class KindDetection:
     review_required: bool = True
     column_kinds: dict[str, str] = field(default_factory=dict)
     override: str | None = None
+    # Deterministic results for this file (source column -> "table.column"),
+    # filled by the mapper before the LLM stage so the prompt can show the
+    # model the whole file, not only the unresolved columns. Not serialized.
+    resolved_context: dict[str, str] = field(default_factory=dict)
 
     @property
     def effective_kind(self) -> str:
         return self.override or self.primary
+
+    @property
+    def tied_kinds(self) -> frozenset[str]:
+        """Every kind sharing the top score (a tie means the file is mixed).
+
+        An explicit override always wins and yields exactly one kind.
+        """
+        if self.override:
+            return frozenset({self.override})
+        if self.primary == KIND_UNKNOWN or not self.scores:
+            return frozenset({self.primary})
+        top = max(self.scores.values())
+        return frozenset(k for k, v in self.scores.items() if abs(v - top) < 1e-9)
 
     def to_dict(self) -> dict[str, Any]:
         return {

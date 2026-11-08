@@ -317,6 +317,11 @@ _RAW: dict[str, tuple[AliasTarget, ...]] = {
             "segments-schema-mapping.md L103",
             kinds=frozenset({"products", "orders"}),
         ),
+        AliasTarget(
+            "coupon_campaigns", "campaign_type",
+            "dunnhumby.py L479: campaign_desc DESCRIPTION -> campaign_type",
+            kinds=frozenset({"coupons", "campaigns"}),
+        ),
     ),
     "Price": _entries(
         AliasTarget(
@@ -377,7 +382,7 @@ _RAW: dict[str, tuple[AliasTarget, ...]] = {
         AliasTarget(
             "coupon_campaigns", "source_campaign_id",
             "segments-schema-mapping.md L156",
-            kinds=frozenset({"coupons"}),
+            kinds=frozenset({"coupons", "campaigns"}),
             alternates=(
                 AliasAlternate(
                     "coupon_redemptions", "campaign_id",
@@ -396,7 +401,7 @@ _RAW: dict[str, tuple[AliasTarget, ...]] = {
         AliasTarget(
             "coupon_campaigns", "source_campaign_id",
             "dunnhumby.py L452: CAMPAIGN -> source_campaign_id",
-            kinds=frozenset({"coupons", "transactions"}),
+            kinds=frozenset({"coupons", "transactions", "campaigns"}),
             alternates=(
                 AliasAlternate(
                     "coupon_redemptions", "campaign_id",
@@ -410,7 +415,7 @@ _RAW: dict[str, tuple[AliasTarget, ...]] = {
         AliasTarget(
             "coupon_campaigns", "campaign_type",
             "segments-schema-mapping.md L160",
-            kinds=frozenset({"coupons"}),
+            kinds=frozenset({"coupons", "campaigns"}),
         ),
         AliasTarget(
             "marketing_campaigns", "campaign_type",
@@ -422,14 +427,14 @@ _RAW: dict[str, tuple[AliasTarget, ...]] = {
         AliasTarget(
             "coupon_campaigns", "start_date",
             "segments-schema-mapping.md L161",
-            kinds=frozenset({"coupons"}),
+            kinds=frozenset({"coupons", "campaigns"}),
         ),
     ),
     "end_date": _entries(
         AliasTarget(
             "coupon_campaigns", "end_date",
             "segments-schema-mapping.md L162",
-            kinds=frozenset({"coupons"}),
+            kinds=frozenset({"coupons", "campaigns"}),
         ),
     ),
     "date": _entries(
@@ -661,7 +666,7 @@ TABLE_KINDS: dict[str, frozenset[str]] = {
     "events": frozenset({"events"}),
     "marketing_campaigns": frozenset({"campaigns"}),
     "message_sends": frozenset({"messages"}),
-    "coupon_campaigns": frozenset({"coupons"}),
+    "coupon_campaigns": frozenset({"coupons", "campaigns"}),
     "coupon_redemptions": frozenset({"coupons"}),
     "holidays": frozenset({"holidays"}),
     "causal_data": frozenset({"transactions"}),

@@ -123,7 +123,9 @@ def map_csv(
     pending: list[PendingColumn] = []
 
     for column in profile.columns:
-        resolved, pending_payload = _resolve_deterministic(column, kind, catalog)
+        resolved, pending_payload = _resolve_deterministic(
+            column, kind, catalog, accepted_kinds=detection.tied_kinds
+        )
         if resolved is not None:
             mappings.append(resolved)
         else:
@@ -139,6 +141,12 @@ def map_csv(
         "invalid_discarded": 0,
         "dataset_kind_opinion": None,
         "error": None,
+    }
+
+    detection.resolved_context = {
+        m.source_column: f"{m.target_table}.{m.target_column}"
+        for m in mappings
+        if m.target_table and m.target_column
     }
 
     if pending:
@@ -172,16 +180,28 @@ def map_csv(
 # ---------------------------------------------------------------------------
 # Stage 3: deterministic resolution (exact name match + documented aliases)
 # ---------------------------------------------------------------------------
+# File kinds that own dedicated tables. In these files a column whose only
+# candidates belong to other tables is sent to the LLM rather than forced.
+_SPECIALISED_KINDS = frozenset({"messages", "events", "campaigns", "coupons", "holidays"})
+
+
 def _resolve_deterministic(
     source_column: str,
     kind: str,
     catalog: SchemaCatalog,
+    accepted_kinds: frozenset[str] | None = None,
 ) -> tuple[ColumnMapping | None, PendingColumn]:
     """Return (resolved mapping | None, pending payload).
 
     When the mapping is None the column must go to the LLM stage; the payload
     then carries any pre-validated candidates (deterministic ambiguity).
+
+    ``accepted_kinds`` holds every kind tied for the top detection score. A
+    candidate survives when it fits ANY of them, so a tied (mixed) file never
+    has its kind decided by dictionary order; competing survivors go to the
+    LLM as validated candidates instead.
     """
+    accepted_kinds = accepted_kinds or frozenset({kind})
     norm = alias_mod.normalize(source_column)
     cands: dict[tuple[str, str], _Cand] = {}
 
@@ -240,7 +260,7 @@ def _resolve_deterministic(
 
     def kind_ok(cand: _Cand) -> bool:
         entry_kinds = cand.entry.kinds if cand.entry is not None else None
-        return alias_mod.kind_matches(kind, cand.table, entry_kinds)
+        return any(alias_mod.kind_matches(k, cand.table, entry_kinds) for k in accepted_kinds)
 
     surviving = [cand for cand in cands.values() if kind_ok(cand)]
 
@@ -259,6 +279,18 @@ def _resolve_deterministic(
             surviving = documented
     if len(surviving) == 1:
         return _build_resolved(source_column, surviving[0], kind), PendingColumn(source_column, {})
+    if not surviving and accepted_kinds & _SPECIALISED_KINDS:
+        # Every candidate belongs to a table that does not fit this file's
+        # specialised kind (e.g. `category` in a messages file only names
+        # products.category). Do not force it: hand the rejected options to
+        # the LLM, which sees the whole file and may also answer "no target".
+        # Retail kinds (customers/orders/products/transactions) routinely mix
+        # entities in one file, so they keep the honest-ambiguity fallback.
+        return None, PendingColumn(
+            source_column=source_column,
+            metadata={},
+            candidates=[c.to_candidate().to_dict() for c in original.values()],
+        )
     if not surviving:
         surviving = list(original.values())  # filter too strict -> honest ambiguity
     if len(surviving) > 1:

@@ -133,11 +133,22 @@ def build_prompt(
         }
         for p in pending
     ]
+    all_columns = list(detection.column_kinds) or [p.source_column for p in pending]
+    resolved = detection.resolved_context
+    resolved_lines = "\n".join(
+        f"- {src} -> {target}" for src, target in resolved.items()
+    ) or "- (none)"
     return f"""You map CSV column names of an e-commerce store onto the canonical schema \
 of a Customer Data Platform. You are given column NAMES and safe metadata only — no cell \
 values, no customer data. Do not ask for values; reason from names, dtypes and shapes.
 
 Detected file kind candidates (may be wrong; a file can mix entities): {kind_candidates}
+
+FILE CONTEXT — every column header in this file, in order (names only):
+{json.dumps(all_columns, ensure_ascii=False)}
+
+Already mapped by documented rules (do not reuse these targets for other columns):
+{resolved_lines}
 
 RULES
 1. Choose a target ONLY from this exact list of canonical targets (table.column). \
@@ -150,6 +161,18 @@ prefer one of them if a candidate fits.
 4. explanation: one short sentence citing the name/dtype evidence.
 5. dataset_kind: your overall opinion of this file's entity, one of: \
 {", ".join(_ALLOWED_KINDS)} — or null if unsure.
+6. Use the FILE CONTEXT. Each target receives at most one source column. A bare \
+row counter such as `id` is NOT the business identifier when a more specific \
+identifier column exists in the same file (e.g. `message_id`, `order_id`) — return null \
+for it. A bare `id` in a file with no other identifier for its entity IS that entity's \
+source id.
+7. Record-keeping audit columns (`created_at`, `updated_at`, `inserted_at`, ...) and \
+per-event detail timestamps (`opened_first_time_at`, `clicked_last_time_at`, ...) are \
+not business event times: return null unless a target describes exactly that moment.
+8. Pick the table that matches the file's entity: campaign files with plain \
+`start_date`/`end_date` dates describe coupon campaigns; files with \
+`channel`/`topic`/`started_at` describe marketing (messaging) campaigns. A \
+`category` column in a messaging file categorises messages, not products.
 
 CANONICAL TARGETS (upload-mappable fields only)
 {targets}
