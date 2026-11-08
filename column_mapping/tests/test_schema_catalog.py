@@ -17,10 +17,12 @@ from column_mapping.schema_catalog import (
     parse_schema_sql,
 )
 
-# Current verified state of the schema (23 tables, 81 upload-mappable fields).
+# Current verified state of the schema (23 tables, 82 upload-mappable fields).
 # Deliberately exact: any upstream schema change should break this test so the
 # mapping allowlist is re-verified, not silently widened.
-CURRENT_MAPPABLE_COUNT = 81
+# Re-verified against schema.sql @ a78ff7f (Transformation contract v2:
+# NUMERIC without source precision, TIMESTAMP wall times, + order_items.source_timestamp).
+CURRENT_MAPPABLE_COUNT = 82
 
 
 def test_parses_all_23_tables_from_real_schema(catalog):
@@ -31,7 +33,8 @@ def test_parses_all_23_tables_from_real_schema(catalog):
 
 def test_column_nullability_and_types_come_from_ddl(catalog):
     spec = catalog.tables["order_items"]["sales_value"]
-    assert spec.sql_type == "NUMERIC(12,2)"
+    # contract v2: source precision is not declared in DDL
+    assert spec.sql_type == "NUMERIC"
     assert spec.nullable is False
     assert spec.provenance == "[S]"
     assert spec.fk_reference is None
