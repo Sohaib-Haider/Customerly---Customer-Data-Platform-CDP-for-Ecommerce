@@ -1,0 +1,222 @@
+{
+  "description": "Answer key for column_mapping on the six real Kaggle source datasets. Each source column lists every acceptable target (table.column). NONE means leaving the column unmapped is correct. Targets follow what data_prep/transform/*.py actually writes, restricted to the upload-mappable set printed by `python -m column_mapping verify --show-targets`.",
+  "files": {
+    "direct-messaging/campaigns.csv": {
+      "id": ["marketing_campaigns.source_campaign_id"],
+      "campaign_type": ["marketing_campaigns.campaign_type"],
+      "channel": ["marketing_campaigns.channel"],
+      "topic": ["marketing_campaigns.topic"],
+      "started_at": ["marketing_campaigns.started_at"],
+      "finished_at": ["marketing_campaigns.finished_at"],
+      "total_count": ["marketing_campaigns.total_count"],
+      "ab_test": ["NONE"],
+      "warmup_mode": ["NONE"],
+      "hour_limit": ["NONE"],
+      "subject_length": ["NONE"],
+      "subject_with_personalization": ["NONE"],
+      "subject_with_deadline": ["NONE"],
+      "subject_with_emoji": ["NONE"],
+      "subject_with_bonuses": ["NONE"],
+      "subject_with_discount": ["NONE"],
+      "subject_with_saleout": ["NONE"],
+      "is_test": ["NONE"],
+      "position": ["NONE"]
+    },
+    "direct-messaging/client_first_purchase_date.csv": {
+      "client_id": ["customers.source_customer_id"],
+      "first_purchase_date": ["customers.first_purchase_date"]
+    },
+    "direct-messaging/holidays.csv": {
+      "date": ["holidays.date"],
+      "holiday": ["holidays.holiday"]
+    },
+    "direct-messaging/messages-demo.csv": {
+      "id": ["NONE"],
+      "message_id": ["message_sends.source_message_id"],
+      "campaign_id": ["marketing_campaigns.source_campaign_id"],
+      "message_type": ["message_sends.message_type"],
+      "client_id": ["customers.source_customer_id", "message_sends.customer_id"],
+      "channel": ["message_sends.channel"],
+      "category": ["NONE"],
+      "platform": ["NONE"],
+      "email_provider": ["NONE"],
+      "stream": ["NONE"],
+      "date": ["NONE"],
+      "sent_at": ["message_sends.sent_at"],
+      "is_opened": ["message_sends.is_opened"],
+      "opened_first_time_at": ["NONE"],
+      "opened_last_time_at": ["NONE"],
+      "is_clicked": ["message_sends.is_clicked"],
+      "clicked_first_time_at": ["NONE"],
+      "clicked_last_time_at": ["NONE"],
+      "is_unsubscribed": ["message_sends.is_unsubscribed"],
+      "unsubscribed_at": ["NONE"],
+      "is_hard_bounced": ["message_sends.is_hard_bounced"],
+      "hard_bounced_at": ["NONE"],
+      "is_soft_bounced": ["message_sends.is_soft_bounced"],
+      "soft_bounced_at": ["NONE"],
+      "is_complained": ["message_sends.is_complained"],
+      "complained_at": ["NONE"],
+      "is_blocked": ["message_sends.is_blocked"],
+      "blocked_at": ["NONE"],
+      "is_purchased": ["message_sends.is_purchased"],
+      "purchased_at": ["message_sends.purchased_at"],
+      "created_at": ["NONE"],
+      "updated_at": ["NONE"]
+    },
+    "dunnhumby-the-complete-journey/campaign_desc.csv": {
+      "DESCRIPTION": ["coupon_campaigns.campaign_type"],
+      "CAMPAIGN": ["coupon_campaigns.source_campaign_id"],
+      "START_DAY": ["coupon_campaigns.start_date"],
+      "END_DAY": ["coupon_campaigns.end_date"]
+    },
+    "dunnhumby-the-complete-journey/campaign_table.csv": {
+      "DESCRIPTION": ["coupon_campaigns.campaign_type"],
+      "household_key": ["customers.source_customer_id"],
+      "CAMPAIGN": ["coupon_campaigns.source_campaign_id"]
+    },
+    "dunnhumby-the-complete-journey/causal_data.csv": {
+      "PRODUCT_ID": ["products.source_product_id", "causal_data.product_id"],
+      "STORE_ID": ["causal_data.source_store_id", "orders.source_store_id"],
+      "WEEK_NO": ["causal_data.week_no", "orders.week_no"],
+      "display": ["causal_data.display"],
+      "mailer": ["causal_data.mailer"]
+    },
+    "dunnhumby-the-complete-journey/coupon.csv": {
+      "COUPON_UPC": ["coupon_redemptions.coupon_id"],
+      "PRODUCT_ID": ["products.source_product_id"],
+      "CAMPAIGN": ["coupon_campaigns.source_campaign_id"]
+    },
+    "dunnhumby-the-complete-journey/coupon_redempt.csv": {
+      "household_key": ["customers.source_customer_id", "coupon_redemptions.customer_id"],
+      "DAY": ["NONE", "orders.day_no"],
+      "COUPON_UPC": ["coupon_redemptions.coupon_id"],
+      "CAMPAIGN": ["coupon_campaigns.source_campaign_id", "coupon_redemptions.campaign_id"]
+    },
+    "dunnhumby-the-complete-journey/hh_demographic.csv": {
+      "household_key": ["customers.source_customer_id"],
+      "AGE_DESC": ["NONE"],
+      "MARITAL_STATUS_CODE": ["NONE"],
+      "INCOME_DESC": ["NONE"],
+      "HOMEOWNER_DESC": ["NONE"],
+      "HH_COMP_DESC": ["NONE"],
+      "HOUSEHOLD_SIZE_DESC": ["NONE"],
+      "KID_CATEGORY_DESC": ["NONE"]
+    },
+    "dunnhumby-the-complete-journey/product.csv": {
+      "PRODUCT_ID": ["products.source_product_id"],
+      "MANUFACTURER": ["NONE"],
+      "DEPARTMENT": ["products.department"],
+      "BRAND": ["products.brand"],
+      "COMMODITY_DESC": ["products.commodity_desc"],
+      "SUB_COMMODITY_DESC": ["NONE", "products.name"],
+      "CURR_SIZE_OF_PRODUCT": ["NONE"]
+    },
+    "dunnhumby-the-complete-journey/transaction_data.csv": {
+      "household_key": ["customers.source_customer_id", "orders.customer_id"],
+      "BASKET_ID": ["orders.source_order_id", "order_items.order_id"],
+      "DAY": ["orders.day_no", "orders.order_date"],
+      "PRODUCT_ID": ["products.source_product_id", "order_items.product_id"],
+      "QUANTITY": ["order_items.quantity"],
+      "SALES_VALUE": ["order_items.sales_value"],
+      "STORE_ID": ["orders.source_store_id"],
+      "RETAIL_DISC": ["order_items.retail_disc"],
+      "TRANS_TIME": ["orders.order_timestamp", "order_items.source_timestamp"],
+      "WEEK_NO": ["orders.week_no"],
+      "COUPON_DISC": ["order_items.coupon_disc"],
+      "COUPON_MATCH_DISC": ["order_items.coupon_match_disc"]
+    },
+    "e-commerce-customer-churn/data_ecommerce_customer_churn.csv": {
+      "Tenure": ["customers.tenure"],
+      "WarehouseToHome": ["customers.warehouse_to_home"],
+      "NumberOfDeviceRegistered": ["customers.number_of_devices_registered"],
+      "PreferedOrderCat": ["customers.preferred_order_category"],
+      "SatisfactionScore": ["customers.satisfaction_score"],
+      "MaritalStatus": ["NONE"],
+      "NumberOfAddress": ["NONE"],
+      "Complain": ["customers.complain"],
+      "DaySinceLastOrder": ["customers.days_since_last_order"],
+      "CashbackAmount": ["customers.cashback_amount"],
+      "Churn": ["customers.churn"]
+    },
+    "ecommerce-behavior-data-from-multi-category-store/2019-Oct.csv": {
+      "event_time": ["events.event_timestamp"],
+      "event_type": ["events.event_type"],
+      "product_id": ["products.source_product_id", "events.product_id"],
+      "category_id": ["events.category_id"],
+      "category_code": ["events.category_code"],
+      "brand": ["events.brand", "products.brand"],
+      "price": ["events.price"],
+      "user_id": ["customers.source_customer_id", "events.customer_id"],
+      "user_session": ["events.session_id"]
+    },
+    "ecommerce-behavior-data-from-multi-category-store/2019-Nov.csv": {
+      "event_time": ["events.event_timestamp"],
+      "event_type": ["events.event_type"],
+      "product_id": ["products.source_product_id", "events.product_id"],
+      "category_id": ["events.category_id"],
+      "category_code": ["events.category_code"],
+      "brand": ["events.brand", "products.brand"],
+      "price": ["events.price"],
+      "user_id": ["customers.source_customer_id", "events.customer_id"],
+      "user_session": ["events.session_id"]
+    },
+    "online-retail-ii-uci/online_retail_II.csv": {
+      "Invoice": ["orders.source_order_id", "order_items.order_id"],
+      "StockCode": ["products.source_product_id", "order_items.product_id"],
+      "Description": ["products.name"],
+      "Quantity": ["order_items.quantity"],
+      "InvoiceDate": ["orders.order_date", "orders.order_timestamp", "order_items.source_timestamp"],
+      "Price": ["order_items.unit_price", "products.unit_price"],
+      "Customer ID": ["customers.source_customer_id", "orders.customer_id"],
+      "Country": ["NONE"]
+    },
+    "predicting-coupon-redemption/campaign_data.csv": {
+      "campaign_id": ["coupon_campaigns.source_campaign_id"],
+      "campaign_type": ["coupon_campaigns.campaign_type"],
+      "start_date": ["coupon_campaigns.start_date"],
+      "end_date": ["coupon_campaigns.end_date"]
+    },
+    "predicting-coupon-redemption/coupon_item_mapping.csv": {
+      "coupon_id": ["coupon_redemptions.coupon_id"],
+      "item_id": ["products.source_product_id"]
+    },
+    "predicting-coupon-redemption/customer_demographics.csv": {
+      "customer_id": ["customers.source_customer_id"],
+      "age_range": ["NONE"],
+      "marital_status": ["NONE"],
+      "rented": ["NONE"],
+      "family_size": ["NONE"],
+      "no_of_children": ["NONE"],
+      "income_bracket": ["NONE"]
+    },
+    "predicting-coupon-redemption/customer_transaction_data.csv": {
+      "date": ["orders.order_date"],
+      "customer_id": ["customers.source_customer_id", "orders.customer_id"],
+      "item_id": ["products.source_product_id", "order_items.product_id"],
+      "quantity": ["order_items.quantity"],
+      "selling_price": ["order_items.sales_value"],
+      "other_discount": ["order_items.other_discount"],
+      "coupon_discount": ["order_items.coupon_disc"]
+    },
+    "predicting-coupon-redemption/item_data.csv": {
+      "item_id": ["products.source_product_id"],
+      "brand": ["products.brand"],
+      "brand_type": ["NONE"],
+      "category": ["products.category"]
+    },
+    "predicting-coupon-redemption/test.csv": {
+      "id": ["NONE"],
+      "campaign_id": ["coupon_campaigns.source_campaign_id", "coupon_redemptions.campaign_id"],
+      "coupon_id": ["coupon_redemptions.coupon_id"],
+      "customer_id": ["customers.source_customer_id", "coupon_redemptions.customer_id"]
+    },
+    "predicting-coupon-redemption/train.csv": {
+      "id": ["NONE"],
+      "campaign_id": ["coupon_campaigns.source_campaign_id", "coupon_redemptions.campaign_id"],
+      "coupon_id": ["coupon_redemptions.coupon_id"],
+      "customer_id": ["customers.source_customer_id", "coupon_redemptions.customer_id"],
+      "redemption_status": ["coupon_redemptions.redemption_status"]
+    }
+  }
+}
