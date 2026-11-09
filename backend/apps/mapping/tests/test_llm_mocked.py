@@ -10,10 +10,10 @@ from __future__ import annotations
 
 import pytest
 
-from column_mapping import config as config_mod
-from column_mapping.llm import LLMBadResponse, LLMRateLimit, LLMUnavailable, build_prompt
-from column_mapping.mapper import map_csv
-from column_mapping.models import (
+from apps.mapping import config as config_mod
+from apps.mapping.llm import LLMBadResponse, LLMRateLimit, LLMUnavailable, build_prompt
+from apps.mapping.mapper import map_csv
+from apps.mapping.models import (
     METHOD_LLM,
     METHOD_NONE,
     STATUS_NEEDS_REVIEW,
@@ -215,8 +215,8 @@ def test_bad_response_error_type_is_distinct():
 # prompt safety
 # --------------------------------------------------------------------------
 def test_prompt_contains_metadata_but_never_raw_values(catalog):
-    from column_mapping.detect import detect_kinds
-    from column_mapping.llm import PendingColumn
+    from apps.mapping.detect import detect_kinds
+    from apps.mapping.llm import PendingColumn
 
     pending = [
         PendingColumn(

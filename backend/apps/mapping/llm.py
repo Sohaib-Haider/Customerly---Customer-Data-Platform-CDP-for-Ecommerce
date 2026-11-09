@@ -1,10 +1,10 @@
 """Google Gemini integration (official ``google-genai`` SDK).
 
 Contract:
-* API key read from ``GEMINI_API_KEY`` via :mod:`column_mapping.config`
+* API key read from ``GEMINI_API_KEY`` via :mod:`apps.mapping.config`
   (repo-root ``.env`` or process env). The key is passed ONLY to the SDK
   client constructor — never into prompts, logs, JSON output or messages,
-  and every surfaced error string passes :func:`column_mapping.config.scrub`.
+  and every surfaced error string passes :func:`apps.mapping.config.scrub`.
 * Model configurable via ``GEMINI_MODEL`` (default ``gemini-3.8-flash``).
 * Structured JSON output via the SDK's ``response_schema`` (a pydantic model),
   with a ``json.loads`` fallback if the SDK returns raw text.
@@ -12,7 +12,7 @@ Contract:
   share, distinct count, value-shape tags, likely-PII flag) — no cell values,
   no customer records.
 * The canonical target list embedded in the prompt is the parsed, validated
-  mappable set from :mod:`column_mapping.schema_catalog`; the mapper
+  mappable set from :mod:`apps.mapping.schema_catalog`; the mapper
   re-validates every returned suggestion against the same gate afterwards,
   so even a hallucinated target cannot survive.
 
@@ -195,7 +195,7 @@ class GeminiColumnClient:
         except ImportError as exc:  # pragma: no cover - depends on environment
             raise LLMUnavailable(
                 "google-genai SDK is not installed "
-                "(pip install -r column_mapping/requirements.txt)"
+                "(pip install -r backend/requirements/base.txt)"
             ) from exc
         from .config import api_key as env_api_key
 

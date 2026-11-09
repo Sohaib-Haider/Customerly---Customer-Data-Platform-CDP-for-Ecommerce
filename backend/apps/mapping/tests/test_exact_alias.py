@@ -6,8 +6,8 @@ exact/alias logic is tested in isolation from any model behaviour.
 
 from __future__ import annotations
 
-from column_mapping.mapper import map_csv
-from column_mapping.models import (
+from apps.mapping.mapper import map_csv
+from apps.mapping.models import (
     METHOD_ALIAS,
     METHOD_EXACT,
     METHOD_NONE,

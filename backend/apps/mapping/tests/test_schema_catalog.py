@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from column_mapping.schema_catalog import (
+from apps.mapping.schema_catalog import (
     DOCUMENTED_FK_TARGETS,
     EXPECTED_TABLE_COUNT,
     INGESTIBLE_TABLES,

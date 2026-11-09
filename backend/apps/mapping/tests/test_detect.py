@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from column_mapping.detect import KIND_UNKNOWN, KindDetection, detect_kinds
-from column_mapping.mapper import map_csv
+from apps.mapping.detect import KIND_UNKNOWN, KindDetection, detect_kinds
+from apps.mapping.mapper import map_csv
 
 
 def test_transactions_file_detection(sample_csv):

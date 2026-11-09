@@ -1,7 +1,7 @@
 """Shared fixtures + import bootstrap for column_mapping tests.
 
 Run from the repo root:
-    .venv\\Scripts\\python -m pytest column_mapping/tests
+    .venv\\Scripts\\python -m pytest apps/mapping/tests   (from backend/)
 
 All Gemini interactions are mocked (FakeLLM below). The suite touches the
 network never and the real API key never.
@@ -15,24 +15,25 @@ from pathlib import Path
 
 import pytest
 
-# Make `import column_mapping` work regardless of pytest's rootdir handling.
-REPO_ROOT = Path(__file__).resolve().parents[2]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
+# Make `import apps.mapping` work regardless of pytest's rootdir handling:
+# the Django project root (backend/) goes on sys.path.
+BACKEND_DIR = Path(__file__).resolve().parents[3]
+if str(BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(BACKEND_DIR))
 
-from column_mapping.llm import LLMOutcome, LLMSuggestion  # noqa: E402
+from apps.mapping.llm import LLMOutcome, LLMSuggestion  # noqa: E402
 
 
 @pytest.fixture(scope="session")
 def catalog():
-    from column_mapping.schema_catalog import get_catalog
+    from apps.mapping.schema_catalog import get_catalog
 
     return get_catalog()
 
 
 @pytest.fixture
 def sample_csv() -> Path:
-    return REPO_ROOT / "column_mapping" / "samples" / "store_upload_sample.csv"
+    return BACKEND_DIR / "apps" / "mapping" / "samples" / "store_upload_sample.csv"
 
 
 def make_csv(tmp_path: Path, columns: list[str], rows: int = 3, prefix: str = "src") -> Path:

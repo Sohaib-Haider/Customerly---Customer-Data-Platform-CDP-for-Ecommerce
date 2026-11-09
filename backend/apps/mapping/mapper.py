@@ -5,7 +5,7 @@ Pipeline for one CSV (headers + safe local metadata only ever leave here):
 1. ``profile_csv``     — local column metadata (dtype/null/distinct/shapes).
 2. ``detect_kinds``    — reviewable source-entity kind (multi-entity aware).
 3. exact/alias match   — deterministic resolution seeded from the documented
-                         mappings in :mod:`column_mapping.aliases` and the
+                         mappings in :mod:`apps.mapping.aliases` and the
                          canonical column names of the parsed schema.
 4. Gemini              — ONLY the unresolved/ambiguous remainder goes to the
                          model, validated against the same mappable gate.

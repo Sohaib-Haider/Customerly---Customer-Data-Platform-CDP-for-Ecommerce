@@ -1,4 +1,4 @@
-"""Environment loading for column_mapping.
+"""Environment loading for the mapping app (column mapping).
 
 Reads the repo-root ``.env`` (gitignored) and process environment. The API key
 is handled as an opaque secret: it is never logged, never printed, never
@@ -15,9 +15,13 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-# Repo root = parent of the column_mapping/ package directory.
-REPO_ROOT = Path(__file__).resolve().parents[1]
-ENV_FILE = REPO_ROOT / ".env"
+# This package lives at backend/apps/mapping/ inside the Django project.
+BACKEND_DIR = Path(__file__).resolve().parents[2]
+REPO_ROOT = BACKEND_DIR.parent
+# backend/.env is the project's documented secrets file; a repo-root .env is
+# still honoured as a fallback. Both are gitignored.
+ENV_FILE = BACKEND_DIR / ".env"
+FALLBACK_ENV_FILE = REPO_ROOT / ".env"
 
 # Default documented in .env.example. The Gemini API reports model
 # availability per account; if a run returns HTTP 404 for the model, set
@@ -38,7 +42,10 @@ def load_env(path: Path | None = None) -> Path | None:
     Deliberately tiny: KEY=VALUE lines, optional ``export`` prefix, optional
     surrounding quotes, ``#`` comments. Returns the path read, or None.
     """
-    env_path = Path(path) if path is not None else ENV_FILE
+    if path is not None:
+        env_path = Path(path)
+    else:
+        env_path = ENV_FILE if ENV_FILE.is_file() else FALLBACK_ENV_FILE
     if not env_path.is_file():
         return None
     for raw in env_path.read_text(encoding="utf-8").splitlines():

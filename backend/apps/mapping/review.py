@@ -100,7 +100,7 @@ def _set_target(
     if field_ is None:
         raise ReviewError(
             f"correction {source_column} -> {table}.{column} rejected: not an "
-            f"upload-mappable canonical field (use `python -m column_mapping verify` "
+            f"upload-mappable canonical field (use `python -m apps.mapping verify` "
             f"to list eligible targets)"
         )
     before = f"{mapping.target_table}.{mapping.target_column}" if mapping.has_target else None

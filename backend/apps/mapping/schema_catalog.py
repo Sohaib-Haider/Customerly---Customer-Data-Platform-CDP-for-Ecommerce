@@ -35,7 +35,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[3]  # backend/apps/mapping -> repo
 SCHEMA_SQL_PATH = REPO_ROOT / "backend" / "schema.sql"
 SCHEMA_MD_PATH = REPO_ROOT / "docs" / "notes" / "schema-notes" / "final-schema.md"
 

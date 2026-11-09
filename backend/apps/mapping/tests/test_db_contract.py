@@ -4,8 +4,8 @@
 
 from __future__ import annotations
 
-from column_mapping.mapper import map_csv
-from column_mapping.models import (
+from apps.mapping.mapper import map_csv
+from apps.mapping.models import (
     STATUS_APPROVED,
     STATUS_REJECTED,
     STATUS_UNMAPPED,

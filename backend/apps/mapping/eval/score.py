@@ -1,10 +1,10 @@
 """Score column_mapping outputs against the real-dataset answer key.
 
 Usage:
-    python -m column_mapping.eval.score MAPPING_DIR [--truth PATH] [--json OUT]
+    python -m apps.mapping.eval.score MAPPING_DIR [--truth PATH] [--json OUT]
 
 MAPPING_DIR holds one ``<dataset>__<file-stem>.mapping.json`` per source file,
-as produced by ``python -m column_mapping map``. A column is correct when its
+as produced by ``python -m apps.mapping map``. A column is correct when its
 proposed target (or "NONE" when no target was proposed) is in the answer key's
 acceptable set. Columns whose answer is NONE measure false positives; the rest
 measure recall.

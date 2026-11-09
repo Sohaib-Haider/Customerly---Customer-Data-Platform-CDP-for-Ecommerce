@@ -5,10 +5,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from column_mapping.cli import main
+from apps.mapping.cli import main
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-SAMPLE = REPO_ROOT / "column_mapping" / "samples" / "store_upload_sample.csv"
+SAMPLE = Path(__file__).resolve().parents[1] / "samples" / "store_upload_sample.csv"
 
 
 def test_verify_reports_schema_tables(capsys):

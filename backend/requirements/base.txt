@@ -1,0 +1,4 @@
+# Shared runtime packages for the Django backend.
+
+# apps/mapping: official Google GenAI SDK for Gemini column mapping.
+google-genai>=1.50

@@ -1,4 +1,4 @@
-"""Command-line interface: ``python -m column_mapping <command>``.
+"""Command-line interface: ``python -m apps.mapping <command>``.
 
 Commands
 --------
@@ -10,7 +10,7 @@ review   Approve / correct / reject proposals -> revised JSON document.
 apply    Write per-table CSVs for APPROVED direct mappings + apply_report.json.
 
 Global honesty rules baked into every command:
-* the API key is never printed (see column_mapping.config.scrub);
+* the API key is never printed (see apps.mapping.config.scrub);
 * `map` degrades instead of crashing when Gemini is unavailable;
 * `review` validates corrections against the real schema;
 * `apply` refuses anything that is not an approved direct mapping.
@@ -129,7 +129,7 @@ def cmd_map(args: argparse.Namespace) -> int:
               file=summary_stream)
     if args.output != "-":
         print(f"  -> {out_path}", file=summary_stream)
-        print("  next: python -m column_mapping review "
+        print("  next: python -m apps.mapping review "
               f"{out_path} -o <approved.json>", file=summary_stream)
     return 0
 
@@ -195,7 +195,7 @@ def cmd_apply(args: argparse.Namespace) -> int:
 
     if not report.applied:
         print("nothing applied — no mappings are `approved` yet.")
-        print("approve first: python -m column_mapping review <doc.json> --approve col1,col2")
+        print("approve first: python -m apps.mapping review <doc.json> --approve col1,col2")
     for applied in report.applied:
         print(f"  applied {applied.source_column} -> "
               f"{applied.target_table}.{applied.target_column}")
@@ -209,7 +209,7 @@ def cmd_apply(args: argparse.Namespace) -> int:
 # --------------------------------------------------------------------------- parser
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="python -m column_mapping",
+        prog="python -m apps.mapping",
         description="Gemini-assisted CSV column mapping onto the Customerly canonical schema.",
     )
     sub = parser.add_subparsers(dest="command", required=True)

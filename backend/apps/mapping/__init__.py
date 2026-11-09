@@ -8,10 +8,10 @@ SDK) for the remainder, then gates everything behind explicit human approval.
 
 Typical flow::
 
-    python -m column_mapping verify
-    python -m column_mapping map data.csv -o data.mapping.json
-    python -m column_mapping review data.mapping.json --approve-suggested
-    python -m column_mapping apply data.mapping.json data.csv -o out/
+    python -m apps.mapping verify
+    python -m apps.mapping map data.csv -o data.mapping.json
+    python -m apps.mapping review data.mapping.json --approve-suggested
+    python -m apps.mapping apply data.mapping.json data.csv -o out/
 
 See README.md in this package for details.
 """

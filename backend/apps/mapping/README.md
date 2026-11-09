@@ -1,4 +1,13 @@
-# column_mapping — Gemini-assisted canonical column mapping
+# apps/mapping — Gemini-assisted canonical column mapping
+
+Django app `apps.mapping` (the README's "LLM column-mapping logic"). Run every
+command below from `backend/`. Inside the Django project the same CLI is
+available as `python manage.py map_columns <verify|map|review|apply> ...`
+once `config/settings` lists `apps.mapping` in `INSTALLED_APPS`.
+
+Real-data evaluation: `eval/ground_truth.json` is the answer key for the 171
+columns of the six Kaggle source datasets; score a folder of mapping JSONs with
+`python -m apps.mapping.eval.score <dir>`.
 
 Standalone, framework-free Python component of the Customerly CDP final-year
 project. It maps the CSV columns of a **future store upload** onto the
@@ -25,13 +34,13 @@ verify  ->  map  ->  review  ->  apply
 
 ```bash
 python -m venv .venv
-.venv\Scripts\pip install -r column_mapping/requirements.txt   # google-genai + pytest
+.venv\Scripts\pip install -r requirements/dev.txt   # google-genai + pytest (run from backend/)
 ```
 
 ## Configure the API key
 
 ```bash
-copy .env.example .env      # then fill in your key
+copy .env.example .env      # in backend/, then fill in your key
 ```
 
 | Variable         | Purpose                                             |
@@ -46,34 +55,34 @@ Security properties enforced by this package:
 * the key is passed only to the SDK client constructor — never into prompts,
   JSON documents, logs, or test fixtures;
 * every error string surfacing to stdout/stderr/files passes
-  `column_mapping.config.scrub()`, which redacts the key defensively.
+  `apps.mapping.config.scrub()`, which redacts the key defensively.
 
 ## Usage
 
 ```bash
 # 0) cross-check schema.sql <-> final-schema.md <-> alias dictionary
-python -m column_mapping verify [--show-targets]
+python -m apps.mapping verify [--show-targets]
 
 # 1) map a CSV's columns (Gemini is used only for the unresolved remainder)
-python -m column_mapping map path/to/upload.csv -o upload.mapping.json
-python -m column_mapping map path/to/upload.csv --no-llm          # offline mode
-python -m column_mapping map path/to/upload.csv --kind transactions  # override kind
+python -m apps.mapping map path/to/upload.csv -o upload.mapping.json
+python -m apps.mapping map path/to/upload.csv --no-llm          # offline mode
+python -m apps.mapping map path/to/upload.csv --kind transactions  # override kind
 
 # 2) human approval / correction (the ONLY path to `approved`)
-python -m column_mapping review upload.mapping.json --interactive
-python -m column_mapping review upload.mapping.json \
+python -m apps.mapping review upload.mapping.json --interactive
+python -m apps.mapping review upload.mapping.json \
     --approve col_a,col_b --set col_c=table.column --reject col_d \
     --approve-exact --kind transactions
 
 # 3) apply ONLY approved direct mappings -> one CSV per canonical table
-python -m column_mapping apply upload.mapping.json upload.csv -o out/
+python -m apps.mapping apply upload.mapping.json upload.csv -o out/
 ```
 
 Try it on the bundled sample (fake data, intentionally unfamiliar column
 names):
 
 ```bash
-python -m column_mapping map column_mapping/samples/store_upload_sample.csv
+python -m apps.mapping map apps/mapping/samples/store_upload_sample.csv
 ```
 
 ## How a mapping is represented
@@ -149,7 +158,7 @@ JSON's `alternate_targets` and must be handled by the loader.
 ## Tests
 
 ```bash
-.venv\Scripts\python -m pytest column_mapping/tests
+.venv\Scripts\python -m pytest apps/mapping/tests   # from backend/
 ```
 
 70 offline tests cover: schema parsing/provenance gating, exact + alias

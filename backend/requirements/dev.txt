@@ -1,0 +1,4 @@
+-r base.txt
+
+# Test runner (apps/mapping/tests).
+pytest>=8.0

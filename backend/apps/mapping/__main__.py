@@ -1,4 +1,4 @@
-"""Entry point for ``python -m column_mapping``."""
+"""Entry point for ``python -m apps.mapping``."""
 
 from __future__ import annotations
 

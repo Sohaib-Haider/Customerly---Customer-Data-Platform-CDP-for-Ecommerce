@@ -6,9 +6,9 @@ import json
 
 import pytest
 
-from column_mapping.apply import apply_approved
-from column_mapping.mapper import map_csv
-from column_mapping.models import (
+from apps.mapping.apply import apply_approved
+from apps.mapping.mapper import map_csv
+from apps.mapping.models import (
     METHOD_MANUAL,
     REQUIRES_RELATIONSHIP,
     STATUS_APPROVED,
@@ -16,7 +16,7 @@ from column_mapping.models import (
     STATUS_REJECTED,
     STATUS_SUGGESTED,
 )
-from column_mapping.review import (
+from apps.mapping.review import (
     ReviewError,
     apply_decisions,
     load_document,

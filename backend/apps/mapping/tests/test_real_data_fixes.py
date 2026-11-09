@@ -6,9 +6,9 @@ the corrected behaviour. All LLM interaction is mocked.
 
 from __future__ import annotations
 
-from column_mapping.detect import detect_kinds
-from column_mapping.llm import PendingColumn, build_prompt
-from column_mapping.mapper import map_csv
+from apps.mapping.detect import detect_kinds
+from apps.mapping.llm import PendingColumn, build_prompt
+from apps.mapping.mapper import map_csv
 
 
 def _by_col(result):
