@@ -44,10 +44,10 @@ celerybeat.pid
 logs/
 
 # ── Trained model artifacts ───────────────────────────────────────
-# binaries are reproducible from data_prep/training/ — don't version them
-# (keep the folders themselves so the structure stays visible)
+# Keep the application model; ignore other reproducible training artifacts.
 backend/ml_models/*
 !backend/ml_models/.gitkeep
+!backend/ml_models/churn_model.pkl
 
 # ── Node / frontend ───────────────────────────────────────────────
 node_modules/
