@@ -43,12 +43,6 @@ celerybeat.pid
 *.log
 logs/
 
-# ── Trained model artifacts ───────────────────────────────────────
-# Keep the application model; ignore other reproducible training artifacts.
-backend/ml_models/*
-!backend/ml_models/.gitkeep
-!backend/ml_models/churn_model.pkl
-
 # ── Node / frontend ───────────────────────────────────────────────
 node_modules/
 .pnpm-store/
