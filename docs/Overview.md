@@ -79,6 +79,16 @@ Data is cleaned/transformed in-memory (pandas), then persisted once into the pla
 ## Segmentation & KPIs
 After mapping, check which segments the store's fields satisfy → run those segments (ML or rule-based) → save results to `customer_segments` table. KPIs computed the same way (from raw + ML outputs) → `customer_kpis` table. Customer 360 view = a joined view over customer + segments + KPIs, not separately stored raw data.
 
+### Segmentation app organization
+
+- Use one Django app, `backend/apps/segments/`, for all nine segmentation types. Segmentation is one business domain within the backend; each model does not need its own Django app.
+- Keep each segmentation implementation in its own module or subpackage, for example `segments/predictors/churn/` and `segments/predictors/clv/`. Each owns its feature construction, exact training-time preprocessing requirements, prediction logic, output interpretation, and tests. Add the remaining seven implementations as they become ready.
+- Share segment eligibility checks, implementation registration, model loading/version selection, execution orchestration, tenant filtering, and membership persistence within the app. Separate implementations can still expose different API endpoints when needed.
+- This follows the canonical schema: `segments` holds the shared definitions and `required_fields`, `ml_models` tracks artifacts and versions by segment, and `customer_segments` stores customer memberships. Customer 360 and campaigns consume these common records regardless of which implementation produced them.
+- Keep trained artifacts in `backend/ml_models/`, separate from prediction code. The current `churn_model.pkl` and `clv_model.pkl` need model-specific loading adapters because their saved artifact structures differ.
+- Preserve model-specific output contracts: a churn probability and a CLV monetary prediction are different values. Do not put monetary predictions into the probability-style `customer_segments.score`; their storage contract must be resolved before integration. Likewise, customer-product replenishment features need an explicit grain/storage decision rather than being forced into one customer row.
+- Treat this as the intended organization, not completed backend integration. A Django app groups code within the backend; creating nine apps would not by itself create nine independently deployed services. Revisit separate apps or services if future segmentation areas acquire distinct business workflows, ownership, or deployment requirements.
+
 ## Campaigns
 User picks a segment (or custom filter) → builds a workflow with drag-and-drop nodes: send-message (with variables like {{customer_name}}), wait/delay, channel-select (WhatsApp / SMS / email only).
 

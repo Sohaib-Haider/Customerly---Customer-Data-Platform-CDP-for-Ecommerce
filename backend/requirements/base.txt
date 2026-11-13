@@ -1,10 +1,17 @@
-<<<<<<< HEAD
 # Shared runtime packages for the Django backend.
+Django>=5.2,<5.3
+djangorestframework>=3.16,<3.17
+psycopg[binary]>=3.2,<4
+dj-database-url>=3,<4
+python-dotenv>=1.0,<2
 
-# apps/mapping: official Google GenAI SDK for Gemini column mapping.
+# Existing mapping and preprocessing components.
 google-genai>=1.50
-=======
-scikit-learn>=1.4
+numpy==2.5.4
+pandas==3.0.6
+
+# Match the existing final serialized models and recovered preparation.
+scikit-learn==1.9.1
+joblib==1.6.0
 seaborn>=0.13
 matplotlib>=3.8
->>>>>>> c0f8767 (churn prediction model trained, saved as churn_model.pkl)

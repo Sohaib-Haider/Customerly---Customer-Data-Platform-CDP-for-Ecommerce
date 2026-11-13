@@ -9,12 +9,10 @@ from django.test import TestCase
 
 from apps.preprocessing.preprocessing import (
     clean_column_names,
-    encode_categorical,
     fix_data_types,
     handle_missing_values,
     handle_outliers,
     infer_column_types,
-    normalize_numeric,
     parse_dates,
     remove_constant_columns,
     remove_duplicates,
@@ -59,7 +57,9 @@ class CleanColumnNamesTest(TestCase):
         df = pd.DataFrame({"A B": [1], "a_b": [2]})
         result = clean_column_names(df)
         self.assertEqual(len(result.columns), 2)
-        self.assertTrue(all(c == "a_b" or c == "a_b_0" for c in result.columns))
+        self.assertTrue(result.columns.is_unique)
+        self.assertIn("a_b", result.columns)
+        self.assertEqual(result.iloc[0].tolist(), [1, 2])
 
 
 class TrimWhitespaceTest(TestCase):
@@ -157,8 +157,10 @@ class HandleOutliersTest(TestCase):
     def test_cap_action(self):
         df = pd.DataFrame({"a": [1, 2, 3, 100]})
         result = handle_outliers(df, columns=["a"], method="iqr", action="cap")
-        self.assertLessEqual(result["a"].max(), 10)
-        self.assertTrue(result["a"].max() < 100)
+        # Q1=1.75, Q3=27.25: the upper 1.5-IQR fence is 65.5.
+        self.assertAlmostEqual(result["a"].max(), 65.5)
+        self.assertEqual(result["a"].iloc[:3].tolist(), [1, 2, 3])
+        self.assertEqual(len(result), len(df))
 
     def test_remove_action(self):
         df = pd.DataFrame({"a": [1, 2, 3, 100]})
@@ -166,32 +168,20 @@ class HandleOutliersTest(TestCase):
         self.assertEqual(len(result), 3)
 
 
-class EncodeCategoricalTest(TestCase):
-    def test_label_encoding(self):
-        df = pd.DataFrame({"color": ["red", "blue", "red"]})
-        result = encode_categorical(df, columns=["color"], method="label")
-        self.assertTrue(pd.api.types.is_numeric_dtype(result["color"]))
-
-    def test_onehot_encoding(self):
-        df = pd.DataFrame({"color": ["red", "blue", "red"]})
-        result = encode_categorical(df, columns=["color"], method="onehot")
-        self.assertTrue("color_red" in result.columns or "color_blue" in result.columns)
 
 
-class NormalizeNumericTest(TestCase):
-    def test_zscore(self):
-        df = pd.DataFrame({"a": [1.0, 2.0, 3.0]})
-        result = normalize_numeric(df, columns=["a"], method="zscore")
-        self.assertAlmostEqual(result["a"].mean(), 0.0, places=6)
-
-    def test_minmax(self):
-        df = pd.DataFrame({"a": [1.0, 2.0, 3.0]})
-        result = normalize_numeric(df, columns=["a"], method="minmax")
-        self.assertAlmostEqual(result["a"].min(), 0.0)
-        self.assertAlmostEqual(result["a"].max(), 1.0)
 
 
 class RunPipelineTest(TestCase):
+    def test_preserves_numeric_units_and_category_labels(self):
+        df = pd.DataFrame({
+            "amount": [100000, 110000, 120000],
+            "customer_group": ["Gold", "Silver", "Gold"],
+        })
+        result, _ = run_pipeline(df)
+        self.assertEqual(result["amount"].tolist(), [100000, 110000, 120000])
+        self.assertEqual(result["customer_group"].tolist(), ["Gold", "Silver", "Gold"])
+
     def test_basic_pipeline(self):
         df = pd.DataFrame(
             {

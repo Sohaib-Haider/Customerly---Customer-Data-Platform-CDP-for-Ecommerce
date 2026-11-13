@@ -1,0 +1,59 @@
+{
+  "format": "churn_numeric_preparation/v1",
+  "features": [
+    "Tenure",
+    "WarehouseToHome",
+    "NumberOfDeviceRegistered",
+    "SatisfactionScore",
+    "Complain",
+    "CashbackAmount"
+  ],
+  "medians": [
+    9.0,
+    14.0,
+    4.0,
+    3.0,
+    0.0,
+    163.34
+  ],
+  "means": [
+    10.075290215588723,
+    15.344941956882256,
+    3.6696517412935323,
+    2.954228855721393,
+    0.28258706467661693,
+    176.949048092869
+  ],
+  "scales": [
+    8.422427398949047,
+    8.375817286224652,
+    1.0268328892912106,
+    1.4104188928929484,
+    0.45025727706953333,
+    49.10272596746028
+  ],
+  "metadata": {
+    "method": "reconstructed_from_checksum_verified_original_source",
+    "classifier_sha256": "1941c83fd150ad73f6bb635f1ce1f6c9aa1c8d20528ddb9745beffe2c1bd4d4e",
+    "source_sha256": "d570d2a822b68af0dfa40333407386e0f442994d62f5b3d505b97c1fb5ec6a75",
+    "notebook_sha256": "5959c8b0decf1f5350bbece49c84be1b7dcdd39d978c6b75e178d6fd99bfcefd",
+    "versions": {
+      "python": "3.13.3",
+      "numpy": "2.5.4",
+      "pandas": "3.0.6",
+      "scikit-learn": "1.9.1",
+      "joblib": "1.6.0"
+    },
+    "source_rows": 3941,
+    "scaler_rows": 3015,
+    "verification": {
+      "saved_scaler_preview": true,
+      "full_transform_parity": true,
+      "missing_value_parity": true,
+      "evaluation_rows": 603,
+      "reproduced_roc_auc": 0.9050313194584765,
+      "saved_roc_auc": 0.905
+    },
+    "limitations": "Original preprocessing used the full data before splitting; model selection reused the evaluation partition. Recovery does not fix those evaluation limitations."
+  }
+}

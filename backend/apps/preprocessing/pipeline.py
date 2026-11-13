@@ -13,12 +13,10 @@ import pandas as pd
 
 from .preprocessing import (
     clean_column_names,
-    encode_categorical,
     fix_data_types,
     handle_missing_values,
     handle_outliers,
     infer_column_types,
-    normalize_numeric,
     parse_dates,
     remove_constant_columns,
     remove_duplicates,
@@ -38,8 +36,6 @@ DEFAULT_STEPS: List[str] = [
     "parse_dates",
     "handle_missing_values",
     "handle_outliers",
-    "encode_categorical",
-    "normalize_numeric",
 ]
 
 
@@ -50,8 +46,7 @@ def default_config() -> Dict[str, Any]:
     - Missing values: type-aware (median for numeric, mode for categorical)
     - Duplicates: removed (keep first)
     - Outliers: IQR method, cap action
-    - Categorical encoding: label
-    - Numeric normalization: zscore
+    Model-specific encoding and scaling belong to the segments app.
     """
     return {
         "clean_column_names": {"enabled": True},
@@ -79,8 +74,6 @@ def default_config() -> Dict[str, Any]:
             "action": "cap",
             "z_threshold": 3.0,
         },
-        "encode_categorical": {"enabled": True, "columns": None, "method": "label"},
-        "normalize_numeric": {"enabled": True, "columns": None, "method": "zscore"},
         "generate_report": False,
     }
 
@@ -212,26 +205,6 @@ def run_pipeline(
                     inferred_types=inferred_types,
                 )
 
-            elif step == "encode_categorical":
-                before_cols = df.shape[1]
-                df = encode_categorical(
-                    df,
-                    columns=step_cfg.get("columns"),
-                    method=step_cfg.get("method", "label"),
-                    inferred_types=inferred_types,
-                )
-                after_cols = df.shape[1]
-                step_report["columns_before"] = before_cols
-                step_report["columns_after"] = after_cols
-
-            elif step == "normalize_numeric":
-                df = normalize_numeric(
-                    df,
-                    columns=step_cfg.get("columns"),
-                    method=step_cfg.get("method", "zscore"),
-                    inferred_types=inferred_types,
-                )
-
             step_report["status"] = "success"
             step_report["rows_after"] = len(df)
             step_report["columns_after"] = df.shape[1]
@@ -326,8 +299,7 @@ def preprocess_csv(
             if inferred_types is not None:
                 # Propagate inferred types to subsequent chunks
                 for step in ("fix_data_types", "parse_dates",
-                             "handle_missing_values", "handle_outliers",
-                             "encode_categorical", "normalize_numeric"):
+                             "handle_missing_values", "handle_outliers"):
                     sc = chunk_cfg.get(step, {})
                     sc["inferred_types"] = inferred_types
 
