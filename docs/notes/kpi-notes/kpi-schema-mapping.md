@@ -327,6 +327,53 @@ Channel preference metrics for the store owner. These track individual customer 
 
 ---
 
+## FYP KPI scope — 2026-11-13
+
+The 115 cards above are the full design. For the Final Year Project they are narrowed to **32 cards**: 19 store KPIs built in FYP1 and 13 segment ML cards in FYP2. The remaining cards stay documented as future scope.
+
+**How the list was narrowed** (each card passes these filters in order):
+
+1. **Data feasibility:** cards the source data cannot support are not built (see the feasibility rules below).
+2. **Audience:** platform-internal cards (Platform Growth) are out of scope for the store dashboard.
+3. **Duplicates:** breakdowns of the same metric (by brand, department, region, week, ...) become filters on one card.
+4. **ML dependency:** cards needing `customer_segments` or `customer_features` move to FYP2.
+5. **Decision value:** low-value descriptive statistics move to future scope.
+
+### FYP1: store KPIs (19 cards, implemented in `backend/apps/analytics/kpis/`)
+
+| # | KPI Card | Category | Sources |
+|---|----------|----------|---------|
+| 1 | Total Revenue (filters: month, week, region, brand, department, category) | Revenue | ret, dnb, cpn |
+| 2 | Revenue by Month | Revenue | ret, dnb, cpn |
+| 3 | Average Order Value | Revenue | ret, dnb |
+| 4 | Historical CLV (Actual) | Revenue | ret |
+| 5 | Top 20% Customers' Revenue Share | Revenue | ret |
+| 6 | Total Customers | Customer | all |
+| 7 | New Customers by Month | Customer | ret, dnb, cpn |
+| 8 | Repeat Purchase Rate | Customer | ret, dnb |
+| 9 | Customer Churn Rate | Customer | chr |
+| 10 | Churn Rate by Preferred Category | Customer | chr |
+| 11 | Avg Satisfaction & Complaint Rate | Customer | chr |
+| 12 | Total Orders (filters: month, week, region) | Order | ret, dnb |
+| 13 | Avg Items per Order | Order | ret, dnb |
+| 14 | Top 10 Products by Revenue | Product | ret, dnb |
+| 15 | View > Cart > Purchase Funnel | Event/Behavior | evb |
+| 16 | Open Rate (Email / Push) | Marketing/Channel | msg |
+| 17 | Click-Through Rate | Marketing/Channel | msg |
+| 18 | Campaign Conversion Rate | Marketing/Channel | msg |
+| 19 | Coupon Redemption Rate | Coupon | cpn |
+
+Sources: `ret` Online Retail II, `dnb` Dunnhumby, `cpn` Predicting Coupon Redemption, `evb` behavior events, `msg` Direct Messaging, `chr` customer churn.
+
+### FYP2: segment ML cards (13 cards)
+
+Segment scores: Churn Risk Score, Future High-Value Score, Purchase Intent Score, Cart Abandonment Risk, Discount Responsiveness Score, Channel Preference, Replenishment Readiness, Cross-sell Affinity Score, Seasonal Purchase Propensity.
+Segment summary: Segment Size, Segment Distribution, Average Segment Score, Customers in Multiple Segments.
+
+If FYP2 implements only the Churn Risk and Future High-Value segments, FYP2 has 6 cards and the FYP total is 25.
+
+---
+
 ## Changelog
 
 | Date | Change |
@@ -341,6 +388,7 @@ Channel preference metrics for the store owner. These track individual customer 
 | 2026-09-27 | Added Segment ML Scores category (13 cards) |
 | 2026-09-27 | Added Channel Preference category (4 cards) — final category |
 | 2026-09-27 | Dropped Causal/Promotion and Holiday categories — not feasible with current data |
+| 2026-11-13 | Added FYP KPI scope: 19 FYP1 store KPIs (implemented) and 13 FYP2 segment cards |
 
 
 ## Source-data feasibility rules — 2026-10-21

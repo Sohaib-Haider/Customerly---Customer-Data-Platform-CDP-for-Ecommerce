@@ -11,6 +11,10 @@ belongs to them:
     customers -> message_sends -> marketing_campaigns
     customers -> coupon_redemptions -> coupon_campaigns
 
+Customers are drawn uniformly at random within each dataset (one-time buyers
+and non-buyers included), so rates computed on the slice (repeat purchase,
+conversion funnel, open rates, ...) stay representative of the full data.
+
 Small reference tables (stores, marketing_campaigns, coupon_campaigns,
 holidays) are kept whole. causal_data is limited to the best-selling sliced
 Dunnhumby products. Every foreign key in the output resolves inside the
@@ -68,12 +72,10 @@ def sample(ids, n: int, rng: random.Random) -> set[str]:
     return set(ids) if len(ids) <= n else set(rng.sample(ids, n))
 
 
-def order_dataset(dataset: str, n_customers: int, min_orders: int, rng: random.Random):
-    """Sample customers who placed at least `min_orders` orders; keep their history."""
+def order_dataset(dataset: str, n_customers: int, rng: random.Random):
+    """Sample customers uniformly among those with any order; keep their history."""
     orders = read(dataset, "orders")
-    counts = orders["customer_id"].value_counts()
-    eligible = counts[counts >= min_orders].index
-    chosen = sample(eligible, n_customers, rng)
+    chosen = sample(orders["customer_id"].unique(), n_customers, rng)
     orders = orders[orders["customer_id"].isin(chosen)]
     items = stream_filter(dataset, "order_items", "order_id", set(orders["id"]))
     customers = read(dataset, "customers")
@@ -102,8 +104,8 @@ def main(argv=None) -> int:
 
     # --- order-based datasets -------------------------------------------------
     product_ids: dict[str, set[str]] = {}
-    for dataset, n, min_orders in ((DH, args.dunnhumby, 5), (RET, args.retail, 2), (CPN, args.coupon, 5)):
-        customers, orders, items = order_dataset(dataset, n, min_orders, rng)
+    for dataset, n in ((DH, args.dunnhumby), (RET, args.retail), (CPN, args.coupon)):
+        customers, orders, items = order_dataset(dataset, n, rng)
         add("customers", customers)
         add("orders", orders)
         add("order_items", items)
@@ -113,17 +115,13 @@ def main(argv=None) -> int:
             dh_items = items
 
     # --- behavior events -------------------------------------------------------
-    # Pass 1: a deterministic ~2% customer bucket, preferring customers who bought.
+    # A deterministic ~2% customer bucket, then a uniform sample from it.
     pool = []
     for chunk in pd.read_csv(path(BEH, "events"), dtype=str, keep_default_na=False, chunksize=CHUNK):
         pool.append(chunk[bucket(chunk["customer_id"], 50) == 0])
     pool = pd.concat(pool, ignore_index=True)
     buyers = set(pool.loc[pool["event_type"] == "purchase", "customer_id"])
-    active = pool["customer_id"].value_counts()
-    active = set(active[active >= 5].index)
-    chosen = sample(buyers, args.behavior, rng)
-    if len(chosen) < args.behavior:
-        chosen |= sample(active - chosen, args.behavior - len(chosen), rng)
+    chosen = sample(pool["customer_id"].unique(), args.behavior, rng)
     events = pool[pool["customer_id"].isin(chosen)]
     customers = stream_filter(BEH, "customers", "id", chosen)
     add("customers", customers)
@@ -156,8 +154,7 @@ def main(argv=None) -> int:
     for chunk in pd.read_csv(path(MSG, "message_sends"), dtype=str, keep_default_na=False, chunksize=CHUNK):
         pool.append(chunk[bucket(chunk["customer_id"], 20) == 0])
     pool = pd.concat(pool, ignore_index=True)
-    per_customer = pool["customer_id"].value_counts()
-    chosen = sample(per_customer[per_customer >= 2].index, args.messaging, rng)
+    chosen = sample(pool["customer_id"].unique(), args.messaging, rng)
     sends = pool[pool["customer_id"].isin(chosen)]
     customers = stream_filter(MSG, "customers", "id", chosen)
     add("customers", customers)
