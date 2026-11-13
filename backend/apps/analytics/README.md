@@ -72,6 +72,20 @@ From the feasibility rules in `kpi-schema-mapping.md`:
 - Dunnhumby only records redeemed coupons, so its redemption rate is
   unavailable (no offered count).
 
+## API
+
+Routed under `/api/` (see `config/urls.py`). Uses the same store-scoped
+bearer token as the segments API; the store always comes from the token.
+
+| Method | Path | Returns |
+|--------|------|---------|
+| GET | `/api/kpis/` | The 19 cards: id, key, name, category, kind, unit, sources, breakdowns |
+| GET | `/api/kpis/<id or key>/` | One computed card for the token's store |
+| GET | `/api/kpis/<id or key>/?by=month` | The card broken down by a supported dimension |
+
+Responses: `404` unknown card, `400` unsupported breakdown, `503` database
+unavailable.
+
 ## Output
 
 `run_card` / `--json` returns, per card: `id`, `key`, `name`, `category`,
