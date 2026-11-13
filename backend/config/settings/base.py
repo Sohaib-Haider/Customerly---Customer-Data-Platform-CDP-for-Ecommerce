@@ -30,6 +30,7 @@ INSTALLED_APPS = [
     "apps.mapping.apps.MappingConfig",
     "apps.preprocessing.apps.PreprocessingConfig",
     "apps.segments.apps.SegmentsConfig",
+    "apps.analytics.apps.AnalyticsConfig",
 ]
 
 MIDDLEWARE = [

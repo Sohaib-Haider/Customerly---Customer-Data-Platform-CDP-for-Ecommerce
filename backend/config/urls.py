@@ -11,4 +11,8 @@ def health(request):
     return JsonResponse({"status": "ok", "service": "customerly-backend"})
 
 
-urlpatterns = [path("health/", health, name="health"), path("api/", include("apps.segments.urls"))]
+urlpatterns = [
+    path("health/", health, name="health"),
+    path("api/", include("apps.segments.urls")),
+    path("api/", include("apps.analytics.urls")),
+]

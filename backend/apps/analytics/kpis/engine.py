@@ -58,7 +58,7 @@ def _plain(value: Any) -> Any:
 def _rows(conn, sql: str, store_id: str | None) -> list[dict[str, Any]]:
     with conn.cursor() as cur:
         cur.execute(sql, {"store_id": store_id})
-        names = [d.name for d in cur.description]
+        names = [d[0] for d in cur.description]  # works for psycopg and Django cursors
         return [{n: _plain(v) for n, v in zip(names, row)} for row in cur.fetchall()]
 
 
