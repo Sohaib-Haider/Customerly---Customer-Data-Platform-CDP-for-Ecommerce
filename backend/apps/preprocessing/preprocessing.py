@@ -3,8 +3,8 @@
 All functions operate on pandas DataFrames and return a DataFrame.
 They are composable and can be chained in any order via run_pipeline.
 
-Column-to-schema mapping, ID namespacing, and store_id tagging are
-handled by the LLM mapping service — NOT by this module.
+Column-to-schema correspondence belongs to mapping. ID namespacing,
+relationship resolution and store_id tagging belong to ingestion, not here.
 """
 
 from __future__ import annotations

@@ -1,5 +1,11 @@
 # apps/mapping — Gemini-assisted canonical column mapping
 
+The app now exposes authenticated APIs: `GET /api/mapping/targets/` and
+`POST /api/mapping/propose/`, `/review/`, `/apply/`. Review state is signed,
+store-scoped and bound to the original CSV. No database writes occur here.
+See the [full implementation and API guide](../../../docs/implementation/mapping/mapping-backend-implementation.md)
+for frontend requests, limits, signed-state handling and ingestion boundaries.
+
 Django app `apps.mapping` (the README's "LLM column-mapping logic"). Run every
 command below from `backend/`. Inside the Django project the same CLI is
 available as `python manage.py map_columns <verify|map|review|apply> ...`
@@ -23,7 +29,8 @@ canonical schema defined in `backend/schema.sql` (23 tables), using:
 It integrates with — but changes nothing in — the existing offline
 transformation pipeline: `backend/schema.sql` is read-only here, and no file
 under `data_prep/transform/` is touched. There is **no Django, no frontend,
-and no database connection** anywhere in this package.
+and no database connection** in the original standalone mapping engine.
+The Django API adapter now exposes that engine to a future frontend.
 
 ```
 verify  ->  map  ->  review  ->  apply

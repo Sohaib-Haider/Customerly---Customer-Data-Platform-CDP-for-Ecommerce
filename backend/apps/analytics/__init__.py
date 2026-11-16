@@ -1,1 +1,1 @@
-"""Analytics app: KPI cards (kpis/) and, later, the Customer 360 view."""
+"""Analytics app: store KPI cards (kpis/) and customer profiles (customer360/)."""

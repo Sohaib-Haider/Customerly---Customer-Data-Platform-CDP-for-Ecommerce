@@ -1,7 +1,16 @@
-# apps/analytics: KPI cards
+# apps/analytics: KPI cards and Customer 360
 
 Django app for the store dashboard analytics. It currently holds the 19 FYP1
-KPI cards (`kpis/`). The Customer 360 view will live alongside them.
+KPI cards (`kpis/`) and the read-only Customer 360 backend (`customer360/`).
+
+Customer 360 provides authenticated customer search, a combined profile with
+purchase/activity summaries and saved segment results, and paginated order,
+event, message and coupon histories. Start with `GET /api/customers/`, then
+`GET /api/customers/{customer_id}/360/`. It uses the existing database and
+store-scoped Bearer tokens; profile reads never execute predictions.
+
+See the [Customer 360 implementation and API guide](../../../docs/implementation/analytics/customer360-backend-implementation.md)
+for every endpoint, response rules, authentication, tests and frontend integration.
 
 The card list and the FYP1/FYP2 split are defined in
 `docs/notes/kpi-notes/kpi-schema-mapping.md` ("FYP KPI scope").

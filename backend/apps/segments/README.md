@@ -5,6 +5,10 @@ and prepares inputs for already trained models. CLV uses the project's final
 saved model, and churn uses its recovered training statistics. Uploading a
 store's data does not automatically train a new model.
 
+For the complete design, database ownership, execution details, and the
+step-by-step checklist for implementing another segment, read the
+[segmentation backend implementation guide](../../../docs/implementation/segmentation/segmentation-backend-implementation.md).
+
 All nine planned segmentation types belong in this one Django app. Each gets
 its own package because its required data, preparation steps, and prediction
 can be different. Shared checks belong in `services/`.
@@ -261,7 +265,8 @@ Its implementation is in `predictors/churn/`. The saved model is
 
 The notebook uses six customer inputs: tenure, distance from warehouse to home,
 number of registered devices, satisfaction score, complaint status, and cashback
-amount. These describe the training inputs, not implemented database mappings.
+amount. These describe the training inputs; their verified database field map
+is implemented in `services/database.py`.
 The churn label itself is not an input.
 
 The `.pkl` contains only the estimator. Its missing preprocessing statistics
@@ -368,7 +373,9 @@ See [CLV training notes](../../../docs/implementation/segmentation/customer-life
 
 Add another package under `predictors/` when its implementation is ready.
 The existing eligibility engine and runner can be extended for other predictors.
-Model selection/version management and persistence remain future work.
+Current artifact registration and result persistence are implemented. New
+predictors must extend their explicit dispatch and registration branches; see
+the implementation guide rather than assuming a new folder is auto-discovered.
 Each predictor retains its own input and output contract.
 The current database mappings were checked against the live Supabase schema.
 Only the two implemented predictors are registered; the other seven remain future work.
@@ -399,7 +406,7 @@ leading zeros survive. Numeric quantity and price strings are parsed using
 decimal arithmetic. This is a Python input format, not a database schema.
 
 Each call must contain only one customer's records from one tenant and source
-population. The future database adapter is responsible for that isolation;
+population. The database adapter is responsible for that isolation;
 this database-free function cannot verify ownership. Supply source product and
 invoice identifiers that retain the training policy's cancellation/code
 meaning, rather than opaque database UUIDs.
