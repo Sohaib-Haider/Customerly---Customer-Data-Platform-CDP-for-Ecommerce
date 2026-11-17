@@ -1,5 +1,11 @@
 # Segmentation app
 
+Frontend audience APIs are available at `GET /api/audiences/`,
+`GET /api/audiences/{churn|clv}/`, and
+`GET /api/audiences/{churn|clv}/customers/`. They read saved memberships,
+provide real counts/pagination and never rescore on GET. Membership thresholds
+remain explicit; a prediction alone does not create an audience assignment.
+
 This app checks whether a customer's data can be used by a segmentation model
 and prepares inputs for already trained models. CLV uses the project's final
 saved model, and churn uses its recovered training statistics. Uploading a

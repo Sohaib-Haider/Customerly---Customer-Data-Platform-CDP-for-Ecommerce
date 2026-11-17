@@ -2,6 +2,7 @@
 from django.db import transaction
 from apps.segments.services.execution import execute_customer
 from .models import Batch, SegmentJob
+from .activity import emit
 
 
 def run_jobs(batch_id=None, limit=100, retry_failed=False):
@@ -38,6 +39,11 @@ def run_jobs(batch_id=None, limit=100, retry_failed=False):
             except Exception:
                 job.status, job.result = "failed", {"detail": "Prediction execution failed; check model registry and database, then retry."}
             job.save()
+            emit(job.batch, "segmentation", f"segmentation.job_{job.status}",
+                 "Prediction attempt finished; inspect its availability and outcome.",
+                 level="error" if job.status == "failed" else "success" if job.status == "completed" else "warning",
+                 metadata={"job_id": str(job.id), "customer_id": str(job.customer_id), "segment": job.segment_key,
+                           "status": job.status, "attempt": job.attempts, **job.result})
             processed += 1
     batches = [batch_id] if batch_id else list(set(
         SegmentJob.objects.filter(id__in=ids).values_list("batch_id", flat=True)) | set(
@@ -47,6 +53,11 @@ def run_jobs(batch_id=None, limit=100, retry_failed=False):
             batch = Batch.objects.select_for_update().get(id=identifier)
             if batch.status not in {"segments_pending", "segments_failed", "completed"}:
                 continue
+            previous = batch.status
             batch.status = "segments_pending" if batch.jobs.filter(status="pending").exists() else "segments_failed" if batch.jobs.filter(status="failed").exists() else "completed"
             batch.save(update_fields=["status", "updated_at"])
+            if previous != batch.status:
+                emit(batch, "segmentation", "segmentation.completed" if batch.status == "completed" else "segmentation.failed",
+                     "Prediction processing completed." if batch.status == "completed" else "Some prediction jobs failed; saved data is intact.",
+                     level="success" if batch.status == "completed" else "error", metadata={"status": batch.status})
     return processed

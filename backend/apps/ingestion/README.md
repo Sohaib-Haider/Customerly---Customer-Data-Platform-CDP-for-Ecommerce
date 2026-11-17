@@ -10,6 +10,11 @@ Use `POST /api/ingestion/sources/`, then `/api/ingestion/batches/`. Each batch
 has `map/`, `review/`, `validate/`, `process/` and `retry-segments/` actions.
 Requests require a signed store-user token and current review revision.
 
+`GET /api/ingestion/batches/{id}/events/?after=0&limit=50` returns persistent
+timestamped progress and outcomes for frontend polling. Batch detail exposes
+the active stage. Migration 0003 installs the event table and operation fields;
+the guide explains visibility, cursor handling and interrupted-operation recovery.
+
 From `backend/`:
 
 ```powershell

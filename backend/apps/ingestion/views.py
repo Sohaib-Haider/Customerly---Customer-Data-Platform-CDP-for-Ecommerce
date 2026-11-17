@@ -7,10 +7,11 @@ from core.api import BoundedJSONParser, ProcessingAPIView
 from .authentication import IngestionAuthentication
 from .models import Batch, Source
 from .serializers import (SourceSerializer, CreateBatchSerializer, MapSerializer,
-                          ReviewSerializer, RevisionSerializer, PageSerializer)
+                          ReviewSerializer, RevisionSerializer, PageSerializer, EventsQuerySerializer)
 from . import services
 from .jobs import run_jobs
 from .storage import storage
+from .activity import operation
 
 
 class IngestionView(ProcessingAPIView):
@@ -76,9 +77,25 @@ class JobsView(IngestionView):
             "id", "customer_id", "segment_key", "status", "attempts", "options", "result", "updated_at"))})
 
 
+class EventsView(IngestionView):
+    def get(self, request, batch_id):
+        batch = services.batch_for(request.user, batch_id)
+        query = self.validated(EventsQuerySerializer, request.query_params)
+        page = list(batch.events.filter(id__gt=query["after"]).order_by("id").values(
+            "id", "operation_id", "stage", "code", "level", "message", "metadata", "occurred_at")[:query["limit"] + 1])
+        results = page[:query["limit"]]
+        return Response({"batch_id": str(batch.id), "results": results, "has_more": len(page) > query["limit"],
+                         "next_after": results[-1]["id"] if results else query["after"],
+                         "activity": {"operation_id": batch.active_operation_id, "stage": batch.active_stage or None,
+                                      "started_at": batch.operation_started_at}, "status": batch.status})
+
+
 class MapView(IngestionView):
     def post(self, request, batch_id):
-        batch = services.map_batch(request.user, batch_id, **self.validated(MapSerializer, request.data))
+        data = self.validated(MapSerializer, request.data)
+        with operation(request.user, batch_id, data["revision"], "mapping"):
+            batch = services.map_batch(request.user, batch_id, **data)
+        batch.refresh_from_db()
         return Response(services.batch_detail(batch))
 
 
@@ -90,13 +107,18 @@ class ReviewView(IngestionView):
 
 class ValidateView(IngestionView):
     def post(self, request, batch_id):
-        batch, valid = services.validate_batch(request.user, batch_id, **self.validated(RevisionSerializer, request.data))
+        data = self.validated(RevisionSerializer, request.data)
+        with operation(request.user, batch_id, data["revision"], "preprocessing"):
+            batch, valid = services.validate_batch(request.user, batch_id, **data)
+        batch.refresh_from_db()
         return Response(services.batch_detail(batch), status=200 if valid else 422)
 
 
 class ProcessView(IngestionView):
     def post(self, request, batch_id):
-        batch = services.process_batch(request.user, batch_id, **self.validated(RevisionSerializer, request.data))
+        data = self.validated(RevisionSerializer, request.data)
+        with operation(request.user, batch_id, data["revision"], "saving"):
+            batch = services.process_batch(request.user, batch_id, **data)
         run_jobs(batch.id, limit=100)
         batch.refresh_from_db()
         return Response(services.batch_detail(batch), status=202 if batch.status == "segments_pending" else 200)

@@ -28,3 +28,10 @@ class ResultsQuerySerializer(serializers.Serializer):
     limit = serializers.IntegerField(min_value=1, max_value=100, default=25)
     offset = serializers.IntegerField(min_value=0, default=0)
     status = serializers.ChoiceField(choices=["predicted", "unavailable"], required=False)
+
+
+class AudienceQuerySerializer(serializers.Serializer):
+    limit = serializers.IntegerField(min_value=1, max_value=100, default=25)
+    offset = serializers.IntegerField(min_value=0, default=0)
+    search = serializers.CharField(max_length=255, allow_blank=True, required=False)
+    source = serializers.RegexField(r"^[A-Za-z0-9_-]{1,50}$", required=False)

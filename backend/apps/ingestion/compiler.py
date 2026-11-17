@@ -193,7 +193,7 @@ def clean_rows(file, decisions, assignments, approved_columns):
     return retained, report
 
 
-def compile_batch(batch):
+def compile_batch(batch, progress=None):
     catalog = get_catalog()
     records = {table: {} for table in INGESTIBLE_TABLES}
     reports = {}
@@ -204,6 +204,8 @@ def compile_batch(batch):
         decisions = review[str(file.id)]
         assignments, columns = selection(file, decisions)
         cleaned, reports[str(file.id)] = clean_rows(file, decisions, assignments, columns)
+        if progress is not None:
+            progress(file, reports[str(file.id)])
         tables = {table for table, column in assignments}
         for row_number, row in cleaned:
             by_table = defaultdict(dict)

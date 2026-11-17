@@ -27,6 +27,9 @@ class Batch(models.Model):
     revision = models.PositiveIntegerField(default=0)
     review = models.JSONField(default=dict)
     report = models.JSONField(default=dict)
+    active_operation_id = models.UUIDField(null=True)
+    active_stage = models.CharField(max_length=20, default="")
+    operation_started_at = models.DateTimeField(null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -78,3 +81,18 @@ class SegmentJob(models.Model):
     class Meta:
         db_table = "ingestion_segment_jobs"
         constraints = [models.UniqueConstraint(fields=["batch", "customer_id", "segment_key"], name="uq_ingestion_segment_job")]
+
+
+class ActivityEvent(models.Model):
+    batch = models.ForeignKey(Batch, related_name="events", on_delete=models.CASCADE)
+    operation_id = models.UUIDField(null=True)
+    stage = models.CharField(max_length=20)
+    code = models.CharField(max_length=80)
+    level = models.CharField(max_length=10, default="info")
+    message = models.CharField(max_length=500)
+    metadata = models.JSONField(default=dict)
+    occurred_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "ingestion_activity_events"
+        indexes = [models.Index(fields=["batch", "id"], name="idx_ingestion_event_cursor")]

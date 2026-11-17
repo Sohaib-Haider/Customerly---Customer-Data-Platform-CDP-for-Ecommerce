@@ -1,6 +1,6 @@
 from django.urls import path
 from .views import (SourcesView, BatchesView, BatchView, MapView, ReviewView,
-                    ValidateView, ProcessView, RetrySegmentsView, DownloadView, JobsView)
+                    ValidateView, ProcessView, RetrySegmentsView, DownloadView, JobsView, EventsView)
 
 app_name = "ingestion"
 urlpatterns = [
@@ -8,6 +8,7 @@ urlpatterns = [
     path("batches/", BatchesView.as_view(), name="batches"),
     path("batches/<uuid:batch_id>/", BatchView.as_view(), name="batch"),
     path("batches/<uuid:batch_id>/jobs/", JobsView.as_view(), name="jobs"),
+    path("batches/<uuid:batch_id>/events/", EventsView.as_view(), name="events"),
     path("batches/<uuid:batch_id>/map/", MapView.as_view(), name="map"),
     path("batches/<uuid:batch_id>/review/", ReviewView.as_view(), name="review"),
     path("batches/<uuid:batch_id>/validate/", ValidateView.as_view(), name="validate"),

@@ -69,7 +69,8 @@ class Command(BaseCommand):
                     for col, table, target in targets[file["name"]]], "bindings": [{"source_column": col, "target_table": table, "target_column": target}
                     for col, table, target in bindings.get(file["name"], [])]} for file in batch["files"]]
                 batch = checked(api.post(base + "review/", {"revision": batch["revision"], "files": decisions,
-                    "segment_options": {"churn": {"enabled": True}, "clv": {"enabled": True, "observation_date": "2026-11-17"}}}, format="json"))
+                    "segment_options": {"churn": {"enabled": True, "update_memberships": True, "membership_threshold": "0"},
+                                        "clv": {"enabled": True, "observation_date": "2026-11-17", "update_memberships": True, "membership_threshold": "0"}}}, format="json"))
                 checked(api.post(base + "validate/", {"revision": batch["revision"]}, format="json"))
                 saved = checked(api.post(base + "process/", {"revision": batch["revision"]}, format="json"))
                 require(saved["status"] == "completed", "Prediction jobs failed; initialize the segment registry and inspect saved job status.")
@@ -92,11 +93,21 @@ class Command(BaseCommand):
                 require(profile["source"]["currency"] == "GBP", "Customer 360 did not resolve source metadata.")
                 kpi = checked(api.get("/api/kpis/total_revenue/"))
                 require(kpi["results"][namespace]["revenue"] == 20.5, "KPI did not include the declared source.")
+                timeline = checked(api.get(base + "events/?limit=100"))
+                require(any(event["code"] == "saving.completed" for event in timeline["results"]), "Saved-data event is missing.")
+                require(all(event["occurred_at"] for event in timeline["results"]), "Events need real timestamps.")
+                catalog = checked(api.get("/api/audiences/"))
+                require(len(catalog["audiences"]) == 2, "Audience catalog must contain exactly the two implemented segments.")
+                for key in ("churn", "clv"):
+                    audience = checked(api.get(f"/api/audiences/{key}/"))
+                    require(audience["member_count"] == 1, "Membership count disagrees with explicit test policy.")
+                    members = checked(api.get(f"/api/audiences/{key}/customers/?limit=1"))
+                    require(members["count"] == 1 and members["results"][0]["customer_id"] == str(customer), "Audience member list is incorrect.")
                 checked(api.post(base + "process/", {"revision": batch["revision"]}, format="json"))
                 with connection.cursor() as cursor:
                     cursor.execute("SELECT count(*) FROM orders WHERE store_id=%s", [str(store)])
                     require(cursor.fetchone()[0] == 1, "Repeated processing duplicated an order.")
-                    cursor.execute("SELECT count(*) FROM pg_class WHERE relname IN ('ingestion_sources','ingestion_batches','ingestion_files','ingestion_reviews','ingestion_segment_jobs') AND relrowsecurity")
-                    require(cursor.fetchone()[0] == 5, "Private ingestion tables must have RLS enabled.")
+                    cursor.execute("SELECT count(*) FROM pg_class WHERE relname IN ('ingestion_sources','ingestion_batches','ingestion_files','ingestion_reviews','ingestion_segment_jobs','ingestion_activity_events') AND relrowsecurity")
+                    require(cursor.fetchone()[0] == 6, "Private ingestion tables must have RLS enabled.")
                 transaction.set_rollback(True)
-        self.stdout.write("Verified: four CSVs, exact amounts, relationships, two real model predictions, Customer 360, KPI, idempotency, concurrent-connection locks and RLS. Test rows rolled back; temporary files removed.")
+        self.stdout.write("Verified: four CSVs, exact amounts, relationships, two real model predictions, Customer 360, KPI, timestamped events, audience counts/members, idempotency, concurrent-connection locks and RLS. Test rows rolled back; temporary files removed.")

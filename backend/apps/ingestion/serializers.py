@@ -85,3 +85,8 @@ class ReviewSerializer(RevisionSerializer):
 class PageSerializer(StrictSerializer):
     limit = serializers.IntegerField(min_value=1, max_value=100, default=25)
     offset = serializers.IntegerField(min_value=0, default=0)
+
+
+class EventsQuerySerializer(StrictSerializer):
+    after = serializers.IntegerField(min_value=0, max_value=9223372036854775807, default=0)
+    limit = serializers.IntegerField(min_value=1, max_value=100, default=50)

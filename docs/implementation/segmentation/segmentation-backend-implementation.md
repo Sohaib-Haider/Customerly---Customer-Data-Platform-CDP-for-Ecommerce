@@ -6,6 +6,8 @@
 
 **Audience:** developers and agents maintaining the two current predictors or adding the remaining seven. Read the extension checklist before implementing another predictor; creating a directory alone does not register it.
 
+**Frontend support, 17 November:** read-only audience summaries and member-list APIs are now implemented in this app. See [section 22](#22-frontend-audience-apis) for their current contract; no model or membership-threshold defaults were changed.
+
 This document contains no connection credentials, signing secrets, or access tokens. All examples use placeholders.
 
 ## Contents
@@ -31,7 +33,8 @@ This document contains no connection credentials, signing secrets, or access tok
 19. [Adding the next segment](#19-adding-the-next-segment)
 20. [Changing a model version](#20-changing-a-model-version)
 21. [Remaining integration work](#21-remaining-integration-work)
-22. [References](#22-references)
+22. [Frontend audience APIs](#22-frontend-audience-apis)
+23. [References](#23-references)
 
 ## 1. What is implemented
 
@@ -833,7 +836,82 @@ Customer 360 should read stored results with their status, computation time, cut
 
 Existing historical KPI names must not be confused with model output: the analytics churn-rate card uses the source's recorded `customers.churn` label, and historical CLV is computed from purchases. Those are different from predicted churn probability and future 90-day purchase revenue in `segment_predictions`. The inspected KPI code does not currently read that prediction table.
 
-## 22. References
+## 22. Frontend audience APIs
+
+This extension uses the existing segments app. It adds `audience_views.py`,
+`services/audiences.py`, the audience query serializer, routes and isolated
+tests. It adds no segmentation tables, model artifacts or scoring logic.
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /api/audiences/` | Two cards: churn and CLV |
+| `GET /api/audiences/{key}/` | One audience's actual counts/state |
+| `GET /api/audiences/{key}/customers/` | Paginated saved audience members |
+
+Authentication is the existing signed store-scoped Bearer mechanism. Store
+existence is checked, membership/customer/prediction reads are tenant-scoped,
+and responses use `Cache-Control: private, no-store`. Unknown keys return 404,
+invalid pagination/filter input returns 400, and database failures return a
+sanitized 503. GET performs no writes or model execution. A missing registered
+definition appears as an unregistered card; its member-list endpoint returns
+503 until registry initialization.
+
+Cards include key/name/description/definition ID, registered flag, `state`,
+`member_count`, `total_customers`, `predicted_count`, `unavailable_count`,
+`not_scored_count`, `membership_configured`, `pending_jobs`, `last_computed_at`
+and `last_membership_at`. Counts are current stored facts, not a new model run.
+The denominator is all customers in the authenticated store, not a promise
+that every source population is model-eligible. Audiences can overlap.
+
+Card states follow this precedence: `unregistered`, `processing` when pending
+jobs exist, `ready` when actual members exist, `not_configured` when no saved
+prediction requested membership evaluation, `unavailable` when configured
+results are unavailable with no predictions, otherwise `empty`. Failed jobs
+remain visible through ingestion job APIs; card state alone does not replace
+those error details. `membership_configured` reflects recorded per-customer
+prediction policies, not a single global audience policy. Existing manually
+assigned members can therefore be ready without that flag.
+
+Each card includes:
+
+```json
+{"campaign":{"enabled":false,"label":"Create campaign","reason":"Coming soon"}}
+```
+
+The frontend can render a grey disabled button with that tooltip. No campaign
+execution endpoint or campaign app implementation is added.
+
+Member lists accept `limit` 1–100 (default 25), nonnegative `offset` (default
+0), optional case-insensitive literal `search` across source ID/email/phone,
+and optional source namespace. Search wildcard characters are escaped. Results
+sort by assignment time descending, then customer ID. The response contains
+`audience`, matching `count`, limit/offset and results. Each member includes
+customer UUID/source ID, available email/phone, stored membership score/time,
+and the current prediction's status/cutoff/computation time/full result if one
+exists. Missing predictions are null. CLV money remains in the prediction
+document; its membership score remains null, not a currency value disguised
+as a probability.
+
+The list is sourced from `customer_segments`, not from all prediction rows.
+Predicted customers below the explicitly requested threshold do not appear.
+Existing assignments can remain while a newer prediction is unavailable;
+both the assignment and current availability are returned honestly. No new
+automatic thresholds, inferred memberships, or edited canonical customer
+values are introduced by reading these endpoints.
+
+`tests/test_audiences.py` covers two-card catalog/state, assignment-versus-
+prediction counts, filtering/search/pagination, foreign-store exclusion,
+authentication, read-only behavior, invalid routes/queries and sanitized
+database errors. The ingestion live verification also checks both real-model
+audiences with explicit test-only zero thresholds and rolls those records back.
+
+Verification for this extension: 10 new activity/audience tests passed; full
+backend suite 340 passed, 34 opt-in KPI database tests skipped, 3 subtests
+passed and 9 existing pandas warnings. Migration drift checks passed. Live
+Supabase verification passed for events, both audience summaries/member lists,
+real predictions, Customer 360, KPI, transaction locks and RLS; test rows rolled back.
+
+## 23. References
 
 - [Segmentation app README](../../../backend/apps/segments/README.md): operator/developer usage guide.
 - [Backend setup](../../../backend/README.md) and [environment template](../../../backend/.env.example).

@@ -18,6 +18,7 @@ from apps.mapping.review import apply_decisions, ReviewError
 from .compiler import compile_batch, save_records, selection, NATURAL, fetch
 from .models import Batch, UploadFile, Source, ReviewVersion, SegmentJob
 from .storage import storage
+from .activity import emit, file_progress
 
 
 class Conflict(APIException):
@@ -100,6 +101,8 @@ def create_batch(principal, source_id, request_key, files):
                         VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
                         [str(upload_id), str(principal.store_id), str(principal.store_user_id), Path(name).name,
                          "csv", count, "uploaded", timezone.now()])
+            emit(batch, "upload", "upload.completed", "CSV files uploaded and stored privately.", level="success",
+                 metadata={"files": len(contents), "rows": sum(item[3] for item in contents)})
             return batch, True
     except Exception:
         for name in saved_names:
@@ -124,6 +127,8 @@ def map_batch(principal, batch_id, revision, use_llm=True):
             file.document, file.approved_document, file.status = result.to_dict(), {}, "mapped"
             file.save(update_fields=["document", "approved_document", "status"])
             canonical_upload(file, batch, "mapped")
+            emit(batch, "mapping", "mapping.file_completed", "File fields mapped; approval is required.",
+                 metadata={"file_id": str(file.id), "summary": result.summary(), "llm_used": bool(result.llm_info.get("used"))})
         batch.review, batch.report = {}, {}
         batch.status, batch.revision = "mapped", batch.revision + 1
         batch.save()
@@ -137,6 +142,8 @@ def review_batch(principal, batch_id, revision, files, segment_options):
         writable(batch)
         if batch.status not in {"mapped", "reviewed", "validated", "validation_failed"}:
             raise Conflict("Map all files before reviewing this batch.")
+        if batch.active_operation_id:
+            raise Conflict("Wait for the current batch operation to finish before changing its review.")
         uploaded = {str(file.id): file for file in batch.files.all()}
         reviewed = [str(item["file_id"]) for item in files]
         if len(set(reviewed)) != len(reviewed) or set(reviewed) != set(uploaded):
@@ -176,6 +183,8 @@ def review_batch(principal, batch_id, revision, files, segment_options):
         batch.save()
         ReviewVersion.objects.create(batch=batch, revision=batch.revision,
                                      reviewed_by=principal.store_user_id, decisions=batch.review)
+        emit(batch, "review", "review.completed", "Mapping decisions and file relationships approved.", level="success",
+             metadata={"revision": batch.revision, "files": len(files)})
         return batch
 
 
@@ -187,7 +196,7 @@ def validate_batch(principal, batch_id, revision):
         if not batch.review:
             raise Conflict("Review the mappings and relationships first.")
         try:
-            records, report = compile_batch(batch)
+            records, report = compile_batch(batch, progress=lambda file, report: file_progress(batch, file, report))
         except ValidationError as exc:
             batch.status = "validation_failed"
             batch.report = {"errors": serializable(exc.detail)}
@@ -210,7 +219,7 @@ def process_batch(principal, batch_id, revision):
             lock_id = int.from_bytes(hashlib.sha256(f"ingestion:source:{batch.store_id}:{batch.source_id}".encode()).digest()[:8], "big", signed=True)
             with connection.cursor() as cursor:
                 cursor.execute("SELECT pg_advisory_xact_lock(%s)", [lock_id])
-        records, report = compile_batch(batch)  # Revalidate against current DB inside the write transaction.
+        records, report = compile_batch(batch, progress=lambda file, report: file_progress(batch, file, report, stage="saving"))
         save_records(records)
         customers = {item["id"] for item in records["customers"].values()}
         for table in ("orders", "events", "message_sends", "coupon_redemptions"):
@@ -249,6 +258,9 @@ def process_batch(principal, batch_id, revision):
         batch.report = {**report, "affected_customers": len(customers), "segment_jobs": jobs}
         batch.status = "segments_pending" if jobs else "completed"
         batch.save()
+        emit(batch, "segmentation", "segmentation.queued" if jobs else "segmentation.skipped",
+             "Prediction work queued after saving." if jobs else "No prediction work was requested or needed.",
+             metadata={"jobs": jobs, "affected_customers": len(customers)})
         # Durable jobs are committed first. The HTTP layer runs them afterwards;
         # a worker can also resume pending work if the request/server disappears.
         return batch
@@ -258,6 +270,9 @@ def batch_detail(batch):
     return {"id": str(batch.id), "source_id": str(batch.source_id), "status": batch.status,
             "revision": batch.revision, "uploaded_by": str(batch.uploaded_by),
             "created_at": batch.created_at, "updated_at": batch.updated_at,
+            "activity": {"operation_id": str(batch.active_operation_id) if batch.active_operation_id else None,
+                         "stage": batch.active_stage or None, "started_at": batch.operation_started_at,
+                         "latest_event_id": batch.events.order_by("-id").values_list("id", flat=True).first()},
             "review": batch.review, "report": batch.report,
             "files": [{"id": str(file.id), "name": file.original_name, "sha256": file.sha256,
                        "rows": file.row_count, "status": file.status, "document": file.document,
