@@ -2,6 +2,8 @@
 
 **Reviewed:** 16 November 2026. This document describes the code currently in the repository. It distinguishes implemented behavior from future platform work.
 
+**Integration update, 17 November:** the [ingestion manager](../ingestion/ingestion-backend-implementation.md) now saves approved CSV data and durably schedules affected customers for these predictors. Customer 360 consumption is also implemented. References below to pending orchestration/consumers predate that integration. CLV now removes the declared source prefix from invoice/product identifiers, retaining its GBP and history checks.
+
 **Audience:** developers and agents maintaining the two current predictors or adding the remaining seven. Read the extension checklist before implementing another predictor; creating a directory alone does not register it.
 
 This document contains no connection credentials, signing secrets, or access tokens. All examples use placeholders.

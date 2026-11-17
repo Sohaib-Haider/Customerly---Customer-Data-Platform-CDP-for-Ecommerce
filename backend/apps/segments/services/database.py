@@ -36,6 +36,11 @@ def clv_purchases(customer, observation_date):
     prefix = customer.source_customer_id.split(":", 1)[0]
     if prefix in DEMO_PREFIXES and prefix != "ret":
         raise SegmentError("unsupported_population", "The current CLV model cannot mix this demo source population with Retail GBP history.")
+    if prefix not in DEMO_PREFIXES:
+        from apps.ingestion.source_metadata import metadata
+        declaration = metadata(customer.store_id, prefix)
+        if declaration and declaration["currency"] != "GBP":
+            raise SegmentError("unsupported_currency", "The source's declared currency does not match the GBP model.")
     cutoff = observation_cutoff(observation_date)
     params = [db_uuid(customer.store_id),
               db_uuid(customer.id),
@@ -72,5 +77,5 @@ def clv_purchases(customer, observation_date):
 
             if Timestamp(source_timestamp).date() != Timestamp(order_date).date():
                 raise SegmentError("inconsistent_purchase_date", "Purchase line and invoice calendar dates disagree.")
-        purchases.append(PurchaseLine(invoice.removeprefix("ret:"), product.removeprefix("ret:"), timestamp, quantity, price))
+        purchases.append(PurchaseLine(invoice.removeprefix(prefix + ":"), product.removeprefix(prefix + ":"), timestamp, quantity, price))
     return purchases

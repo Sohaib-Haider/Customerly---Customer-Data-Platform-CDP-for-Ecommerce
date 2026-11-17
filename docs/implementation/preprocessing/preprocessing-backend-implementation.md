@@ -2,6 +2,11 @@
 
 Implemented API integration: 16 November 2026.
 
+**Integration update, 17 November:** the [ingestion manager](../ingestion/ingestion-backend-implementation.md)
+now invokes cleaning with a protected policy for canonical imports. It preserves
+identity, money, dates and unknown facts rather than applying every standalone
+default to them. This app's standalone API defaults remain as documented below.
+
 ## Purpose and boundaries
 
 `backend/apps/preprocessing` cleans supplied data before ingestion saves it.

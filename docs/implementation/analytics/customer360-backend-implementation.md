@@ -2,6 +2,11 @@
 
 Implemented and verified: 16 November 2026.
 
+**Integration update, 17 November:** the [ingestion manager](../ingestion/ingestion-backend-implementation.md)
+now saves uploaded records and triggers prediction jobs. Customer 360 resolves
+registered source names/currencies per store; KPI applicability uses declared
+source profiles. Original demo-source rules remain unchanged.
+
 This document explains the Customer 360 architecture, database reads, API
 contract, frontend integration, tests, and extension points.
 

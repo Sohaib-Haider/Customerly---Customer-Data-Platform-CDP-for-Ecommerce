@@ -73,16 +73,33 @@ def run_card(conn, card: Card, *, store_id: str | None = None, dimension: str | 
     rows = _rows(conn, sql, store_id)
 
     results: dict[str, Any] = {}
+    declared_sources = {}
+    unsupported = {}
+    declarations = {}
     for row in rows:
         source = row.pop("source")
         if source not in card.sources:
-            continue
+            if source in SOURCES:
+                continue
+            from apps.ingestion.source_metadata import metadata
+            if source not in declarations:
+                declarations[source] = metadata(store_id, source, conn=conn)
+            declaration = declarations[source]
+            if declaration is None:
+                continue
+            declared_sources[source] = {"name": declaration["name"], "currency": declaration["currency"]}
+            if declaration["template"] not in card.sources and card.key != "total_customers":
+                unsupported[source] = "This source's declared data profile does not support this KPI."
+                continue
+            if card.unit == "currency" and declaration["currency"] is None:
+                unsupported[source] = "Source currency has not been verified."
+                continue
         if card.kind == VALUE and not dimension:
             results[source] = row
         else:
             results.setdefault(source, []).append(row)
 
-    unavailable = dict(card.unavailable)
+    unavailable = {**card.unavailable, **unsupported}
     for source in card.sources:
         if source not in results:
             unavailable[source] = (
@@ -102,7 +119,7 @@ def run_card(conn, card: Card, *, store_id: str | None = None, dimension: str | 
         "results": results,
         "unavailable": unavailable,
         "sources": {
-            code: {"name": SOURCES[code].name, "currency": SOURCES[code].currency}
+            code: declared_sources[code] if code in declared_sources else {"name": SOURCES[code].name, "currency": SOURCES[code].currency}
             for code in [*results, *unavailable]
         },
         "note": card.note,

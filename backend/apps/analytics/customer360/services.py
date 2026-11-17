@@ -8,8 +8,13 @@ from . import selectors
 from ..kpis.sources import SOURCES, SYNTHETIC_ORDERS
 
 
-def source_info(code):
+def source_info(code, store_id=None):
     source = SOURCES.get(code)
+    if source is None and store_id is not None:
+        from apps.ingestion.source_metadata import metadata
+        declared = metadata(store_id, code)
+        if declared:
+            return {"code": code, "name": declared["name"], "currency": declared["currency"]}
     return {"code": code, "name": source.name if source else None,
             "currency": source.currency if source else None}
 
@@ -36,7 +41,7 @@ def json_values(value):
 def customer_list(store_id, **query):
     result = selectors.customers(store_id, **query)
     for customer in result["results"]:
-        customer["source"] = source_info(source_code(customer["source_customer_id"]))
+        customer["source"] = source_info(source_code(customer["source_customer_id"]), store_id)
     return result
 
 
@@ -44,9 +49,15 @@ def customer360(store_id, customer_id):
     customer = selectors.profile(store_id, customer_id)
     purchases = selectors.purchase_summary(store_id, customer_id)
     for summary in purchases:
-        summary["source"] = source_info(summary["source"])
+        summary["source"] = source_info(summary["source"], store_id)
         summary["average_order_value_unavailable_reason"] = None
-        if summary["source"]["code"] == "cpn":
+        code = summary["source"]["code"]
+        coupon_source = code == "cpn"
+        if code not in SOURCES:
+            from apps.ingestion.source_metadata import metadata
+            declaration = metadata(store_id, code)
+            coupon_source = bool(declaration and declaration["profile"] == "coupons")
+        if coupon_source:
             summary["average_order_value"] = None
             summary["average_order_value_unavailable_reason"] = SYNTHETIC_ORDERS
     saved_segments = selectors.segments(store_id, customer_id)
@@ -59,7 +70,7 @@ def customer360(store_id, customer_id):
         snapshot["purchase_by_week"] = json.loads(snapshot["purchase_by_week"])
     return {
         "customer": customer,
-        "source": source_info(source_code(customer["source_customer_id"])),
+        "source": source_info(source_code(customer["source_customer_id"]), store_id),
         "purchases": {"status": "available" if purchases else "no_records", "by_source": purchases},
         "activity": selectors.activity_summary(store_id, customer_id),
         "segments": saved_segments,

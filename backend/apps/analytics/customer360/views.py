@@ -48,7 +48,7 @@ class CustomerHistoryView(CustomerAPIView):
         if kind == "orders":
             data = selectors.orders(store_id, customer_id, **query)
             for order in data["results"]:
-                order["source"] = services.source_info(order["source"])
+                order["source"] = services.source_info(order["source"], store_id)
         else:
             data = selectors.history(kind, store_id, customer_id, **query)
         return self.respond({"customer_id": customer_id, **data})
@@ -60,6 +60,6 @@ class CustomerOrderView(CustomerAPIView):
         store_id = request.user.store_id
         selectors.profile(store_id, customer_id)
         order = selectors.order(store_id, customer_id, order_id)
-        order["source"] = services.source_info(order["source"])
+        order["source"] = services.source_info(order["source"], store_id)
         return self.respond({"customer_id": customer_id, "order": order,
                              "items": selectors.order_items(store_id, customer_id, order_id, **query)})

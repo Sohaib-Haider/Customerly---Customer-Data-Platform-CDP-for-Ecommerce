@@ -2,6 +2,12 @@
 
 Implemented API integration: 16 November 2026.
 
+**Integration update, 17 November:** the [ingestion manager](../ingestion/ingestion-backend-implementation.md)
+now coordinates multi-CSV uploads, stores authoritative reviews and resolves
+approved relationships/calculations before saving. References below to future
+ingestion describe the standalone mapping component's boundary; that separate
+coordinator is now implemented.
+
 ## Purpose and architecture
 
 `backend/apps/mapping` is the Django app that proposes canonical schema

@@ -31,6 +31,7 @@ INSTALLED_APPS = [
     "apps.preprocessing.apps.PreprocessingConfig",
     "apps.segments.apps.SegmentsConfig",
     "apps.analytics.apps.AnalyticsConfig",
+    "apps.ingestion.apps.IngestionConfig",
 ]
 
 MIDDLEWARE = [
@@ -82,6 +83,7 @@ USE_I18N = True
 USE_TZ = True
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
+INGESTION_PRIVATE_ROOT = Path(os.getenv("INGESTION_PRIVATE_ROOT", "").strip() or BASE_DIR / "private_uploads")
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # Domain APIs will define their authorization in a later implementation step.

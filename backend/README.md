@@ -41,6 +41,15 @@ created by registering their apps. No authentication endpoints are implemented.
 
 ## Verification
 
+The multi-CSV ingestion backend is implemented. After the canonical schema is
+present, apply its operational migrations with `python manage.py migrate ingestion`
+from `backend/`, initialize the two existing artifacts with
+`python manage.py initialize_segments`, and use a verified store-user token.
+See the [ingestion setup](apps/ingestion/README.md) and
+[complete implementation/API guide](../docs/implementation/ingestion/ingestion-backend-implementation.md).
+Pending prediction work can be resumed with `process_ingestion_jobs`; the worker
+must be supervised separately in deployment. Normal interactive login remains separate.
+
 ```powershell
 .venv/Scripts/python.exe backend/manage.py check
 Push-Location backend

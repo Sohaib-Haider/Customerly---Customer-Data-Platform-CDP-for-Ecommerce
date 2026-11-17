@@ -36,6 +36,7 @@ ENV/
 *.db
 *.db-journal
 backend/media/
+backend/private_uploads/
 backend/staticfiles/
 celerybeat-schedule*
 celerybeat.pid
