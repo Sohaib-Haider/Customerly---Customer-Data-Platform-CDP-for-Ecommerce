@@ -3,6 +3,10 @@
 from rest_framework import serializers
 
 
+class PrepareAudienceSerializer(serializers.Serializer):
+    clv_threshold = serializers.DecimalField(max_digits=24, decimal_places=8, min_value=0)
+
+
 class RunSerializer(serializers.Serializer):
     customer_ids = serializers.ListField(child=serializers.UUIDField(), min_length=1, max_length=100)
     observation_date = serializers.DateField(required=False)

@@ -13,6 +13,18 @@ if (-not (Test-Path backend/.env)) { Copy-Item backend/.env.example backend/.env
 Open `http://127.0.0.1:8000/health/`. This is a database-independent liveness
 endpoint, not a check of Supabase connectivity or schema readiness.
 
+Audience preparation also needs its durable job migration and a separate worker:
+
+```powershell
+.venv/Scripts/python.exe backend/manage.py migrate segments
+.venv/Scripts/python.exe backend/manage.py process_segment_jobs --watch --workers 2 --batch-size 100
+```
+
+Keep the worker terminal open alongside Django. The frontend button enqueues
+work only; queued jobs do not run without a worker. This is separate from the
+existing ingestion-job command. See the segmentation implementation guide for
+leases, retry behavior, batch limits and the rollback-only benchmark command.
+
 ## Settings and credentials
 
 Management commands, ASGI and WSGI default to `config.settings.dev`. Settings

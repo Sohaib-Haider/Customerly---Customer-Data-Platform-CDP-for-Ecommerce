@@ -47,7 +47,7 @@ def test_two_cards_count_members_not_predictions(audience_data):
     assert churn["total_customers"] == 2 and churn["state"] == "ready"
     assert churn["membership_configured"] is True
     assert churn["campaign"] == {"enabled": False, "label": "Create campaign", "reason": "Coming soon"}
-    assert cards["clv"]["state"] == "not_configured"
+    assert cards["clv"]["state"] == "not_generated"
     assert response["Cache-Control"] == "private, no-store"
 
 

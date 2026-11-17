@@ -9,6 +9,7 @@ from django.http import Http404
 from ..models import Customer, CustomerMembership, SegmentPrediction
 from .catalog import DEFINITIONS, get_definition
 from .database import db_uuid
+from .logging import logged, progress
 
 
 def definition(key):
@@ -23,6 +24,8 @@ def definition(key):
 
 def describe(store_id, key):
     from apps.ingestion.models import SegmentJob
+    from ..models import PreparationJob
+    from .jobs import serialize
     item = definition(key)
     customers = Customer.objects.filter(store_id=store_id)
     memberships = CustomerMembership.objects.filter(store_id=store_id, customer__store_id=store_id, segment=item) if item else CustomerMembership.objects.none()
@@ -31,20 +34,26 @@ def describe(store_id, key):
     predicted, unavailable = predictions.filter(status="predicted").count(), predictions.filter(status="unavailable").count()
     configured = predictions.filter(result__membership_policy__requested=True).exists()
     pending = SegmentJob.objects.filter(batch__store_id=store_id, segment_key=key, status="pending").count()
-    state = ("unregistered" if item is None else "processing" if pending else "ready" if member_count else
-             "not_configured" if not configured else "unavailable" if unavailable and not predicted else "empty")
+    job = PreparationJob.objects.filter(store_id=store_id, segment_key=key).order_by('-created_at').first()
+    active = job is not None and job.status in ('queued', 'running')
+    state = ("unregistered" if item is None else "processing" if pending or active else "failed" if job and job.status == 'failed' else "ready" if member_count else
+             "not_generated" if not predictions.exists() else "unavailable" if unavailable and not predicted else
+             "not_configured" if not configured else "empty")
     return {"key": key, "name": DEFINITIONS[key]["name"], "description": DEFINITIONS[key]["description"],
             "registered": item is not None, "id": str(item.id) if item else None, "state": state,
             "member_count": member_count, "total_customers": total, "predicted_count": predicted,
             "unavailable_count": unavailable, "not_scored_count": max(0, total - predicted - unavailable),
             "membership_configured": configured, "pending_jobs": pending,
+            "preparation": serialize(job) if job else None,
             "last_computed_at": predictions.aggregate(value=Max("computed_at"))["value"],
             "last_membership_at": memberships.aggregate(value=Max("assigned_at"))["value"],
             "campaign": {"enabled": False, "label": "Create campaign", "reason": "Coming soon"},
             "note": "Membership uses saved assignments and explicit per-customer policies. Audiences may overlap."}
 
 
+@logged('audience.members.read')
 def members(store_id, key, *, limit, offset, search="", source=None):
+    progress('audience.members.query.started', 'Reading saved audience customers; no model prediction is triggered.', segment=key, limit=limit, offset=offset)
     item = definition(key)
     if item is None:
         return None
@@ -73,4 +82,5 @@ def members(store_id, key, *, limit, offset, search="", source=None):
             results.append({"customer_id": str(uuid.UUID(str(customer_id))), "source_customer_id": source_id,
                 "email": email, "phone_number": phone, "score": score, "assigned_at": assigned,
                 "prediction": {"status": status, "observation_date": cutoff, "computed_at": computed, "result": result} if status else None})
+    progress('audience.members.query.completed', 'Saved audience customer page is ready.', segment=key, total=count, returned=len(results))
     return json.loads(json.dumps({"audience": key, "count": count, "limit": limit, "offset": offset, "results": results}, cls=DjangoJSONEncoder))

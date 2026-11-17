@@ -73,3 +73,31 @@ class SegmentPrediction(models.Model):
         constraints = [models.UniqueConstraint(fields=["store", "customer", "segment"], name="uq_segment_prediction_current"),
                        models.CheckConstraint(condition=models.Q(status__in=["predicted", "unavailable"]), name="ck_segment_prediction_status")]
         indexes = [models.Index(fields=["store", "segment_key", "status"], name="idx_prediction_store_status")]
+
+
+class PreparationJob(models.Model):
+    """Durable store/segment progress; worker leases allow crash recovery."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    store = models.ForeignKey(Store, on_delete=models.CASCADE)
+    segment_key = models.CharField(max_length=20, choices=[('churn', 'churn'), ('clv', 'clv')])
+    status = models.CharField(max_length=20, default='queued', choices=[(s, s) for s in ('queued', 'running', 'completed', 'failed')])
+    clv_threshold = models.DecimalField(max_digits=24, decimal_places=8)
+    cursor = models.UUIDField(null=True)
+    upper_bound = models.UUIDField(null=True)
+    total = models.PositiveIntegerField(default=0)
+    processed = models.PositiveIntegerField(default=0)
+    predicted = models.PositiveIntegerField(default=0)
+    unavailable = models.PositiveIntegerField(default=0)
+    reused = models.PositiveIntegerField(default=0)
+    member_count = models.PositiveIntegerField(default=0)
+    lease_token = models.UUIDField(null=True)
+    lease_until = models.DateTimeField(null=True)
+    error_code = models.CharField(max_length=100, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'segment_preparation_jobs'
+        constraints = [models.UniqueConstraint(fields=['store', 'segment_key'],
+            condition=models.Q(status__in=['queued', 'running']), name='uq_active_segment_preparation')]
+        indexes = [models.Index(fields=['status', 'lease_until'], name='idx_segment_job_claim')]

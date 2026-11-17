@@ -94,6 +94,9 @@ REST_FRAMEWORK = {
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
-    "handlers": {"console": {"class": "logging.StreamHandler"}},
+    "formatters": {"segments": {"format": "{asctime} {levelname} {name} {message}", "style": "{"}},
+    "handlers": {"console": {"class": "logging.StreamHandler"},
+                 "segments_console": {"class": "logging.StreamHandler", "formatter": "segments"}},
+    "loggers": {"apps.segments": {"handlers": ["segments_console"], "level": "INFO", "propagate": False}},
     "root": {"handlers": ["console"], "level": "INFO"},
 }

@@ -11,6 +11,7 @@ import joblib
 from sklearn.exceptions import InconsistentVersionWarning
 
 from .results import SegmentError
+from .logging import progress
 
 MODEL_DIR = Path(__file__).resolve().parents[3] / "ml_models"
 ARTIFACTS = {"churn": "churn_model.pkl", "clv": "clv_model.pkl"}
@@ -24,12 +25,16 @@ def load_model(segment):
     try:
         stat = path.stat()
     except OSError:
+        progress('model.file.unavailable', 'Configured model file could not be found or accessed.', segment=segment)
         raise SegmentError("model_unavailable", "The configured model file is unavailable.") from None
-    return _load_cached(str(path), stat.st_mtime_ns, stat.st_size)
+    result = _load_cached(str(path), stat.st_mtime_ns, stat.st_size)
+    progress('model.ready', 'Trusted model artifact is available; cached artifacts are reused.', segment=segment)
+    return result
 
 
 @lru_cache(maxsize=4)
 def _load_cached(path, modified, size):
+    progress('model.disk.load.started', 'Loading trusted repository PKL artifact from disk.')
     try:
         with warnings.catch_warnings():
             warnings.simplefilter("error", InconsistentVersionWarning)
@@ -37,9 +42,12 @@ def _load_cached(path, modified, size):
         with Path(path).open("rb") as handle:
             digest = hashlib.file_digest(handle, "sha256").hexdigest()
     except InconsistentVersionWarning:
+        progress('model.disk.load.failed', 'Model dependency versions are incompatible.')
         raise SegmentError("incompatible_environment", "The saved estimator requires its training scikit-learn version.") from None
     except Exception:
+        progress('model.disk.load.failed', 'Trusted model artifact could not be loaded.')
         raise SegmentError("model_load_failed", "The configured model could not be loaded.") from None
+    progress('model.disk.load.completed', 'Model loaded and artifact fingerprint calculated.')
     return artifact, digest
 
 

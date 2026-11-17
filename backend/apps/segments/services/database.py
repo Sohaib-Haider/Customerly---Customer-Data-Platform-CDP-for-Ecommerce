@@ -58,6 +58,14 @@ def clv_purchases(customer, observation_date):
             LIMIT %s
         """, params)
         rows = cursor.fetchall()
+    return purchase_lines(customer, rows)
+
+
+def purchase_lines(customer, rows):
+    """Shared validation for individual reads and batched history reads."""
+    prefix = customer.source_customer_id.split(":", 1)[0]
+    if prefix in DEMO_PREFIXES and prefix != 'ret':
+        raise SegmentError('unsupported_population', 'CLV does not support this demo population.')
     if len(rows) > MAX_PURCHASE_LINES:
         raise SegmentError("history_limit_exceeded", "This customer exceeds the synchronous purchase-history limit; history was not truncated for prediction.")
     purchases = []

@@ -9,6 +9,7 @@ from ...services.model_loader import check_recorded_versions, load_model
 from ...services.results import PredictionResult, SegmentError, unavailable
 from .contract import CURRENCY, EXCLUDED_CODES, FEATURES, HISTORY_DAYS, HORIZON_DAYS, POLICY, PREDICTION_POLICY
 from .features import prepare_features
+from ...services.logging import logged, progress
 
 
 def _validate_artifact(artifact):
@@ -37,10 +38,14 @@ def _validate_artifact(artifact):
     return pipeline, metadata
 
 
+@logged('clv.predict')
 def predict(purchases, observation_date, *, currency):
+    progress('clv.currency.started', 'Checking currency compatibility for the final CLV model.')
     if currency != CURRENCY:
+        progress('clv.currency.unavailable', 'Currency does not meet the model contract; prediction skipped.')
         return unavailable("clv", "unsupported_currency", "This model supports GBP inputs only; currency conversion is not implemented.")
     try:
+        progress('clv.model.started', 'Loading and validating the final saved CLV pipeline.')
         artifact, digest = load_model("clv")
         pipeline, model_metadata = _validate_artifact(artifact)
         metadata = {
@@ -51,13 +56,18 @@ def predict(purchases, observation_date, *, currency):
             "history_days": HISTORY_DAYS,
             "horizon_days": HORIZON_DAYS,
         }
+        progress('clv.features.started', 'Building training-matched features from purchase history in memory.')
         prepared = prepare_features(purchases, observation_date)
+        progress('clv.features.completed', 'Purchase history features prepared.', history_lines=prepared.history_lines,
+                 valid_invoices=prepared.valid_invoices, excluded_lines=prepared.excluded_lines)
     except SegmentError as exc:
+        progress('clv.preparation.unavailable', 'Model or purchase history could not satisfy the CLV contract.', reason=exc.code)
         return unavailable("clv", exc.code, str(exc))
 
     metadata.update({"observation_date": prepared.observation_date, "history_lines": prepared.history_lines,
                      "valid_invoices": prepared.valid_invoices, "excluded_lines": prepared.excluded_lines})
     # With no history, check that requirement without inventing feature values.
+    progress('clv.eligibility.started', 'Checking required features and valid invoice history.')
     if prepared.frame.empty:
         from ...services.eligibility import EligibilityPolicy, HistoryRequirement
 
@@ -67,12 +77,18 @@ def predict(purchases, observation_date, *, currency):
         eligibility = check_eligibility(prepared.frame.iloc[0].to_dict(), POLICY,
                                         history_counts={"valid_purchase_invoices": prepared.valid_invoices})
     if not eligibility.eligible:
+        progress('clv.eligibility.unavailable', 'Required CLV evidence is missing or invalid; model will not run.')
         return unavailable("clv", "data_unavailable", "Customer inputs do not meet the CLV requirements.", eligibility=eligibility, metadata=metadata)
     try:
+        progress('clv.eligibility.passed', 'CLV evidence is eligible.')
+        progress('clv.inference.started', 'Running the saved fitted CLV pipeline.')
         raw = np.asarray(pipeline.predict(prepared.frame.loc[:, list(FEATURES)]), dtype=float)
     except (ValueError, TypeError):
+        progress('clv.inference.failed', 'Saved CLV pipeline could not produce a prediction.')
         return unavailable("clv", "prediction_failed", "The saved pipeline could not score the prepared inputs.", eligibility=eligibility, metadata=metadata)
     if raw.shape != (1,) or not np.isfinite(raw).all():
+        progress('clv.inference.invalid', 'CLV pipeline returned an invalid output shape or value.')
         return unavailable("clv", "invalid_prediction", "The saved pipeline returned an invalid prediction.", eligibility=eligibility, metadata=metadata)
+    progress('clv.inference.completed', 'CLV prediction passed validation; applying the trained output policy.')
     return PredictionResult("clv", "predicted", {"predicted_revenue": float(np.maximum(0.0, raw[0])),
         "currency": CURRENCY, "horizon_days": HORIZON_DAYS}, eligibility=eligibility, metadata=metadata)

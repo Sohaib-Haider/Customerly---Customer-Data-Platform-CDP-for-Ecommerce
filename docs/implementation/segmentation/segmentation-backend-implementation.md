@@ -1,5 +1,7 @@
 # Segmentation backend: implementation and extension guide
 
+**Current audience preparation, 17 November 2026:** the Prepare audiences button now queues durable background jobs and returns HTTP 202. The latest section, [Batched background audience preparation](#batched-background-audience-preparation-current), supersedes the earlier synchronous refresh/preparation descriptions. Run `process_segment_jobs --watch` separately; GET requests never execute models.
+
 **Reviewed:** 16 November 2026. This document describes the code currently in the repository. It distinguishes implemented behavior from future platform work.
 
 **Integration update, 17 November:** the [ingestion manager](../ingestion/ingestion-backend-implementation.md) now saves approved CSV data and durably schedules affected customers for these predictors. Customer 360 consumption is also implemented. References below to pending orchestration/consumers predate that integration. CLV now removes the declared source prefix from invoice/product identifiers, retaining its GBP and history checks.
@@ -924,3 +926,103 @@ real predictions, Customer 360, KPI, transaction locks and RLS; test rows rolled
 - [CLV training implementation/results](customer-lifetime-value-model-training-and-results.md) and [original notebook](../../../data_prep/training/clv_prediction.ipynb).
 
 The training documents describe the saved experiments; this document describes their backend use. Historical notebook labels are not instructions to reintroduce a runtime baseline comparison or experimental opt-in gate. When descriptions disagree with later code, inspect the named implementation and update the affected notes explicitly rather than silently assuming a behavior exists.
+
+## Automatic predictions for existing database customers
+
+After connection or application reload, the frontend calls authenticated POST `/api/segments/refresh/`. Each request handles up to 25 missing customer/segment results and returns processed, remaining, and busy. The frontend continues sequentially until complete, then refreshes displayed resources. Errors stop the loop and are shown; reconnecting/reloading resumes. No preprocessing status, new upload, worker, or schema migration is needed. GET endpoints remain read-only.
+
+All reads are scoped to the authenticated store. Existing prediction records, including unavailable outcomes, are skipped with their results, timestamps and memberships preserved. PostgreSQL transaction advisory locks serialize refreshes and explicit scoring, with existence rechecked after locking. Existing explicit run/ingestion paths still permit intentional recomputation after data changes.
+
+The existing final PKL predictors and eligibility checks run on database values; business data is never changed. CLV requires declared GBP source metadata (the established ret demo source is GBP). The automatic historical observation date is the day after that customer's latest recorded order. Missing currency/history is saved as unavailable rather than fabricated. Old demo data therefore produces historical predictions, not predictions described as current.
+
+This trigger saves predictions without inventing membership thresholds or altering existing memberships. Member counts can remain zero while saved prediction counts increase. Membership policy configuration remains separate. The initial state is not_generated; unavailable evidence is shown separately. An unavailable record is not automatically retried on every refresh; use explicit scoring after correcting its data.
+
+## Explicit Prepare audiences button (supersedes automatic frontend trigger)
+
+The Audiences header now opens a preparation dialog rather than navigating to upload. The user enters an explicit minimum CLV predicted 90-day revenue in GBP, then confirms. Churn audience membership uses the final classifier's predicted_class=1. No arbitrary probability or revenue cutoff is silently invented.
+
+Authenticated POST /api/audiences/prepare/ accepts clv_threshold, phase (predictions/churn/clv), and an optional UUID after cursor. The frontend first requests bounded missing predictions using the existing backfill service. It then pages through saved successful churn and CLV predictions, 100 per request, saving canonical customer_segments assignments and removing below-policy assignments. Saved model outputs and computed_at timestamps are preserved. Membership policy metadata is recorded separately inside the result. The response supplies phase, after, processed and done, allowing sequential continuation. All selection and membership writes are scoped to the authenticated store. No schema migration or database business-value modification is involved.
+
+The frontend shows progress/errors, disables the button during work, refreshes cards as batches finish and broadcasts a final resource refresh. It no longer automatically starts generation when the app connects. Existing unavailable outcomes are reused, so missing model requirements remain unavailable until explicitly rescored with corrected data. Retry the button after a request failure; earlier successful batches remain saved and are reused.
+
+## Segmentation diagnostic logging
+
+Timestamped INFO logs now appear in the Django terminal under apps.segments. They cover the explicit API preparation phase, database lock/read, saved-result reuse, missing-result scanning, CLV historical cutoff selection, feature preparation, eligibility, final PKL loading/cache reuse, fitted churn scaling in memory, inference, output validation, registry checks, result persistence, and audience assignment. Both direct run commands and ingestion use these same instrumented services.
+
+Each nested operation shares a short run ID. Customer runs also include internal store/customer UUIDs, segment keys, durations and safe reason codes. Logs deliberately exclude uploaded records, contact details, monetary amounts, feature values, bearer tokens, database URLs and raw exception messages. Unexpected errors log their exception type and re-raise; normal unavailable outcomes state why inference was skipped. Each HTTP preparation batch has its own run ID.
+
+A save.pending or operation.finished message does not claim the enclosing transaction committed. Only save.committed, backfill.committed and audience.assignment.committed messages are emitted by transaction.on_commit; rolled-back writes do not produce commit messages. Missing model data is an unavailable result, not a successful prediction. Cached model reuse is logged without repeatedly loading PKL files.
+
+For HTTP 502, first check that Django is running at the frontend proxy target (default http://127.0.0.1:8000). If no API-start log appears, the request may not have reached Django. If an operation-start appears with no finish, use the last stage to locate the wait/failure. The Vite development proxy now logs upstream connection failures in its terminal and returns a JSON 502 explanation when possible. Restart the frontend development server after changing Vite configuration. These logs diagnose execution; they do not change model outputs or eligibility rules.
+
+## Batched background audience preparation (current)
+
+This section supersedes the earlier connection-time refresh and synchronous Prepare audiences loops. Existing individual inference APIs and the ingestion-specific queue remain compatible; the optimized path here is the explicit Prepare audiences workflow.
+
+### Trigger and API contract
+
+POST `/api/audiences/prepare/` accepts `{ "clv_threshold": "200" }` and responds HTTP 202 with two durable jobs, one for churn and one for CLV. It validates initialization and store access but runs no predictors in the request. A repeated request with the same cutoff reuses active jobs; a different cutoff is rejected while a job is active. A failed job with the same cutoff is requeued from its saved cursor. A completed run can be prepared again to process new customers or apply a different membership cutoff, reusing all existing prediction records.
+
+GET `/api/audiences/jobs/` returns the latest job for each segment in the authenticated store. Each item includes id, segment_key, status, total, processed, predicted, unavailable, reused, member_count, error_code, created_at and updated_at. Audience card/detail responses also expose the latest job as preparation. All GETs are read-only; browsing an audience does not run or retrain a model.
+
+### Durable queue and worker
+
+Migration segments.0003 creates segment_preparation_jobs with RLS enabled and no browser-role policies. This is a server-owned operational table, not a new customer business-data table. A partial unique constraint allows only one queued/running job per store/segment. Queue states are queued, running, completed and failed. A UUID cursor and upper bound support bounded scanning; job counters, membership changes and prediction writes share the same atomic batch transaction.
+
+Run from the repository root in a separate terminal:
+
+```powershell
+.\.venv\Scripts\python.exe backend\manage.py migrate segments
+.\.venv\Scripts\python.exe backend\manage.py process_segment_jobs --watch --workers 2 --batch-size 100
+```
+
+The migration was applied to the configured Supabase database during implementation. The worker is a separate long-lived process and is not automatically launched by runserver. In deployment, run it under the platform's process supervisor. Without a worker, jobs remain queued and the frontend says it is waiting for a worker. Without --watch, workers drain available jobs and exit. The ingestion-specific command continues to handle ingestion jobs independently.
+
+The management command uses at most two worker threads, each with its own Django connection. PostgreSQL SELECT FOR UPDATE SKIP LOCKED claims prevent two workers claiming the same job. Churn and CLV can run independently rather than one waiting for all of the other's customers. Each claim receives a UUID lease token and a 15-minute lease. A stopped worker's lease can be reclaimed after expiry; the old owner cannot commit after its token is replaced. Threads reuse their connections while running; no connection is opened per customer. Idle workers wait instead of busy-spinning. Ctrl+C requests shutdown after current batches finish.
+
+### Batch database and model work
+
+The default batch is 100 customers (CLI range 1–200). One query reads the customer fields and another reads existing predictions. Saved successful and unavailable outcomes are reused without changing their computed_at timestamps. Missing churn inputs are checked in memory; all eligible customer frames are concatenated, transformed with the original fitted imputer/scaler, and passed through one classifier.predict and one predict_proba call per batch. CLV reads source metadata, latest purchase dates and purchase lines in bulk, applies the same validated purchase-history contract, prepares each customer's notebook features in memory, then makes one pipeline.predict call for all eligible frames.
+
+Both paths use the unchanged final PKL files, feature ordering, output policies, compatibility checks and registered artifact fingerprints. No fitting or retraining occurs. CLV uses the already-established historical observation date: day after that customer's latest recorded purchase, with declared GBP source data. The original ret demo population is the known GBP source. Each customer's purchase window remains 288 days and the output is predicted positive revenue over the next 90 days. No raw database business values are normalized or overwritten.
+
+Purchase queries are bounded at 100,000 lines per batch; exceeding that fails safely with history_batch_limit instead of silently truncating model history. Reduce --batch-size before retrying an unusually large-history batch. The existing per-customer history limit is also enforced. Normal missing/unsupported data is a saved unavailable outcome; model/infrastructure errors fail the job and preserve its checkpoint.
+
+### Saving and visible counts
+
+A single SQL statement acquires the same per-customer prediction advisory locks as the explicit run/ingestion service for the entire batch, in sorted customer order. Existing predictions are re-read under those locks to avoid overwriting a result another request saved while computation was in progress. New predictions are bulk-created; memberships are bulk-upserted for qualifying customers and removed in bulk for successful predictions below the selected policy. Existing unavailable outcomes preserve previous memberships, matching the conservative existing backfill behavior.
+
+Churn membership uses predicted_class=1 from the actual classifier. CLV membership uses the explicitly supplied GBP revenue cutoff; a regression output is not silently treated as a high-value label. Membership metadata is saved alongside the model result without changing the prediction computation time. No arbitrary threshold is introduced.
+
+Counters advance only in the transaction that commits results and memberships. Member_count is read from actual canonical memberships after the writes. The UI can show 1, 2 or larger increments depending on how many customers qualify in each batch; it updates after commits, not for each uncommitted row. With a full 100-row page, a final empty page can be claimed to mark completion. New customer arrivals behind the saved UUID cursor are picked up by the next explicit preparation; this is not an immutable snapshot or permanent streaming consumer. No automatic rescoring after underlying data changes is introduced; use the existing explicit run endpoint to recompute saved outcomes deliberately.
+
+### Failure and retry
+
+A failed batch transaction rolls back prediction writes, assignments and cursor changes together. Earlier committed batches remain visible. Errors are stored as safe codes/types, not raw exception messages. The frontend displays the failed segment and its safe reason. Press Prepare audiences with the same cutoff to resume from the checkpoint; the other segment can continue independently. Expired leases are automatically reclaimable by the worker. If the database is temporarily unreachable, the worker closes broken connections and retries in watch mode; a previously claimed job may need its lease to expire before recovery.
+
+Closing the browser does not cancel a queued/running job. Reconnecting later fetches durable status. Worker threads provide controlled parallelism; they are not an unbounded per-customer thread pool. Small deployments can use --workers 1. Performance depends on network latency, input completeness and history size; no fixed latency guarantee is implied.
+
+### Verification and benchmark
+
+The isolated tests verify fast enqueueing without inference, duplicate-request behavior, tenant boundaries, classifier/cutoff membership, atomic checkpoint recovery, lease replacement, reuse of saved outputs, per-batch increasing member counts, bounded query counts and both actual final model artifacts. Vectorized outputs are compared with the existing single-customer predictors. The browser tests exercise one POST followed by polling, independent progress, completion and member navigation.
+
+A rollback-only benchmark command exercises actual reads, model work, bulk writes and job checkpoints against a chosen store:
+
+```powershell
+.\.venv\Scripts\python.exe backend\manage.py benchmark_segment_jobs --store-id YOUR_STORE_UUID --batch-size 100
+```
+
+The benchmark refuses to run alongside active preparation for that store. All test predictions, memberships and jobs are rolled back. Its temporary cutoff of zero is used only for benchmark writes and never persists as a user policy. It does not start a real run or retain measured results.
+
+Observed on the configured Supabase store during this change: 100 churn customers reused 100 existing results (43 predicted and 57 unavailable) in about 3.14 seconds with 13 database statements. A fresh 100-customer CLV batch produced 9 predictions and 91 unavailable outcomes in about 3.86 seconds with 17 database statements, including initial model loading. These are sample-batch measurements, not a full-store runtime estimate or a fresh-churn inference benchmark. The earlier logs showed about 67 seconds for just 25 customers on the old individual-query path.
+
+### Main implementation files
+
+- models.py and migrations/0003_preparationjob.py: durable queue, checkpoint, lease and RLS.
+- services/jobs.py: enqueue, claim, bounded batch processing, bulk persistence and retry.
+- services/batch_prediction.py: bulk source reads and vectorized final-model inference.
+- services/database.py: purchase validation shared by individual and batched reads.
+- management/commands/process_segment_jobs.py: bounded parallel worker process.
+- management/commands/benchmark_segment_jobs.py: rollback-only live verification.
+- views.py, serializers.py, urls.py and services/audiences.py: asynchronous preparation API and progress reads.
+- frontend/src/pages/Audiences.tsx: queue action, polling, progress and filtered member lists.

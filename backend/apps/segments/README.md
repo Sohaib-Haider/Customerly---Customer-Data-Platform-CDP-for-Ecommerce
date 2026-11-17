@@ -685,3 +685,11 @@ and isolated database settings; automated tests do not connect to Supabase, retr
 artifacts. Database/API tests create isolated canonical fixture tables, exercise
 source reads, persistence, authorization, membership removal and batch rollback.
 A separate live check verified the Supabase path with source fingerprints unchanged.
+
+### Progress logs
+
+Run Django in a terminal to see timestamped apps.segments logs for database reads, eligibility, final PKL loading, inference, save commits and audience assignments. Follow the run ID and internal customer UUID to trace work. Unavailable outcomes include safe reason codes. Credentials and customer values are not printed. See the segmentation implementation document for HTTP 502 diagnosis and transaction-log semantics.
+
+### Background preparation (current)
+
+POST /api/audiences/prepare/ now queues durable per-segment jobs and returns HTTP 202. GET /api/audiences/jobs/ reads progress. Keep process_segment_jobs --watch --workers 2 --batch-size 100 running separately from Django. The migration was applied to the configured database. Model inference and database persistence are batched; each commit saves predictions, memberships and progress together. Failed runs can resume. See the latest Batched background audience preparation section in the implementation guide; it supersedes the earlier synchronous prepare loop.

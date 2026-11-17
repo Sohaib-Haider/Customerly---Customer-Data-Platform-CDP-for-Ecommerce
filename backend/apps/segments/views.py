@@ -12,6 +12,7 @@ from .models import Customer, SegmentDefinition, SegmentPrediction, Store
 from .serializers import ResultsQuerySerializer, RunSerializer
 from .services.catalog import DEFINITIONS, get_definition
 from .services.execution import execute_customer
+from .services.logging import logged, progress
 
 
 class SegmentAPIView(APIView):
@@ -33,6 +34,7 @@ class SegmentAPIView(APIView):
             return None
 
     def handle_exception(self, exc):
+        progress('api.request.failed', 'Segmentation API request failed.', error_type=type(exc).__name__)
         if isinstance(exc, DatabaseError):
             return Response({"detail": "Segmentation storage is unavailable; check database configuration and initialization."}, status=503)
         return super().handle_exception(exc)
@@ -49,7 +51,39 @@ class SegmentListView(SegmentAPIView):
         } for key, spec in DEFINITIONS.items()]})
 
 
+class SegmentRefreshView(SegmentAPIView):
+    @logged('api.refresh')
+    def post(self, request):
+        store_id = self.store_id(request)
+        if any(self.definition(key) is None for key in DEFINITIONS):
+            return Response({"detail": "Run initialize_segments before generating predictions."}, status=503)
+        from .services.backfill import fill_missing
+        return Response(fill_missing(store_id))
+
+
+class PrepareAudienceView(SegmentAPIView):
+    @logged('api.prepare_audiences')
+    def post(self, request):
+        from .serializers import PrepareAudienceSerializer
+        from .services.jobs import enqueue
+        store_id = self.store_id(request)
+        if any(self.definition(key) is None for key in DEFINITIONS):
+            return Response({'detail': 'Run initialize_segments before preparing audiences.'}, status=503)
+        serializer = PrepareAudienceSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        options = serializer.validated_data
+        progress('api.prepare.queued', 'Validated request; enqueueing background jobs without running models in HTTP.', store_id=store_id)
+        return Response({'jobs': enqueue(store_id, options['clv_threshold'])}, status=202)
+
+
+class AudiencePreparationJobsView(SegmentAPIView):
+    def get(self, request):
+        from .services.jobs import latest_jobs
+        return Response({'jobs': latest_jobs(self.store_id(request))}, headers={'Cache-Control': 'private, no-store'})
+
+
 class SegmentRunView(SegmentAPIView):
+    @logged('api.run_segment')
     def post(self, request, key):
         store_id = self.store_id(request)
         if self.definition(key) is None:

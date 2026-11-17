@@ -1,0 +1,12 @@
+export type Row = Record<string, any>;
+export type Page<T = Row> = { count: number; limit: number; offset: number; results: T[] };
+export type Source = { id: string; namespace: string; name: string; currency: string | null; analytics_profile: string };
+export type Mapping = { source_column: string; target_table: string | null; target_column: string | null; method: string; status: string; confidence: number | null; requires: string[]; explanation: string; review_note?: string };
+export type MappingDocument = { source: { columns: string[]; row_count: number }; mappings: Mapping[]; llm: { used: boolean; error?: string | null }; summary: Row };
+export type UploadFile = { id: string; name: string; rows: number; status: string; document: MappingDocument; approved_document: MappingDocument | Row };
+export type Batch = { id: string; source_id: string; status: string; revision: number; files: UploadFile[]; review: Row; report: Row; created_at: string; updated_at: string; segmentation: Record<string, number>; activity: { operation_id: string | null; stage: string | null; started_at: string | null; latest_event_id?: number } };
+export type Activity = { id: number; stage: string; code: string; level: string; message: string; occurred_at: string; metadata: Row };
+export type PreparationJob = { id: string; segment_key: string; status: 'queued' | 'running' | 'completed' | 'failed'; total: number; processed: number; predicted: number; unavailable: number; reused: number; member_count: number; error_code: string; updated_at: string };
+export type Audience = { preparation?: PreparationJob | null; key: string; name: string; description: string; state: string; member_count: number; total_customers: number; predicted_count: number; unavailable_count: number; membership_configured: boolean; pending_jobs: number; last_computed_at: string | null; campaign: { enabled: false; label: string; reason: string }; note: string };
+export type Card = { id: number; key: string; name: string; category: string; kind: string; unit: string; dimensions: string[] };
+export type Metric = Card & { results: Record<string, Row | Row[]>; unavailable: Record<string, string>; sources: Record<string, { name: string; currency: string | null }>; note: string };

@@ -28,6 +28,7 @@ def canonical_tables(transactional_db):
     names = [re.match(r"CREATE TABLE (\w+)", statement)[1] for statement in statements]
     with connection.constraint_checks_disabled(), connection.cursor() as cursor:
         cursor.execute("DELETE FROM segment_predictions")
+        cursor.execute("DELETE FROM segment_preparation_jobs")
         for name in reversed(names):
             cursor.execute(f'DROP TABLE IF EXISTS "{name}"')
         for statement in statements:
@@ -36,6 +37,7 @@ def canonical_tables(transactional_db):
     yield
     with connection.constraint_checks_disabled(), connection.cursor() as cursor:
         cursor.execute("DELETE FROM segment_predictions")
+        cursor.execute("DELETE FROM segment_preparation_jobs")
         for name in reversed(names):
             cursor.execute(f'DROP TABLE IF EXISTS "{name}"')
     # Keep the unmanaged FK targets present for Django's post-test flush and

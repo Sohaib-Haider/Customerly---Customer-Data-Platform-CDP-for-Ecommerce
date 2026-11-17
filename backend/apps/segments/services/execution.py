@@ -12,8 +12,10 @@ from .catalog import get_definition, registry_matches
 from .database import churn_inputs, clv_purchases, get_customer
 from .results import SegmentError, unavailable
 from .runner import run_segment
+from .logging import after_commit, logged, progress
 
 
+@logged('customer_prediction')
 def execute_customer(key, store_id, customer_id, *, observation_date=None, currency=None,
                      membership_threshold=None, update_memberships=False, persist=True):
     if update_memberships and (not persist or membership_threshold is None):
@@ -30,27 +32,40 @@ def execute_customer(key, store_id, customer_id, *, observation_date=None, curre
         except SegmentError:
             raise ValueError("CLV requires an explicit source-local observation date.") from None
     with transaction.atomic():
+        progress('database.read.started', 'Reading customer data for this segment.', segment=key)
         if persist and connection.vendor == "postgresql":
+            progress('database.lock.waiting', 'Waiting for this customer and segment prediction lock.', segment=key)
             lock_id = int.from_bytes(hashlib.sha256(f"segments:{store_id}:{key}:{customer_id}".encode()).digest()[:8], "big", signed=True)
             with connection.cursor() as cursor:
                 cursor.execute("SELECT pg_advisory_xact_lock(%s)", [lock_id])
+            progress('database.lock.acquired', 'Prediction lock acquired.', segment=key)
         customer = get_customer(store_id, customer_id)
         definition = get_definition(key)
+        progress('database.customer.loaded', 'Customer and segment definition found.', segment=key)
         if persist and key == "clv":
             previous_date = SegmentPrediction.objects.filter(store_id=store_id, customer=customer, segment=definition).values_list("observation_date", flat=True).first()
             if previous_date is not None and observation_date < previous_date:
                 raise ValueError("An older observation date cannot replace a newer stored prediction; use persist=false for historical evaluation.")
         try:
             if key == "churn":
+                progress('database.inputs.loaded', 'Churn inputs read; checking eligibility before model prediction.', segment=key)
                 result = run_segment(key, values=churn_inputs(customer))
             else:
-                result = run_segment(key, purchases=clv_purchases(customer, observation_date),
+                purchases = clv_purchases(customer, observation_date)
+                progress('database.history.loaded', 'Purchase history read; preparing CLV features.', segment=key, purchase_lines=len(purchases))
+                result = run_segment(key, purchases=purchases,
                                      observation_date=observation_date, currency=currency)
         except SegmentError as exc:
+            progress('data.unavailable', 'Data read or preparation could not satisfy the model requirements.', segment=key, reason=exc.code)
             result = unavailable(key, exc.code, str(exc))
         digest = result.metadata.get("artifact_sha256")
         if result.status == "predicted" and not registry_matches(definition, digest):
+            progress('model.registry.rejected', 'Local model does not match the registered artifact.', segment=key)
             result = unavailable(key, "model_registry_mismatch", "Initialize the registry for the exact local model before scoring.")
+        elif result.status == 'predicted':
+            progress('model.registry.verified', 'Prediction used the registered model artifact.', segment=key)
+        progress('prediction.outcome', 'Model run outcome is ready.', segment=key, status=result.status,
+                 reasons=','.join(reason.code for reason in result.reasons) or 'none')
         payload = result.as_dict()
         membership = {"updated": False, "is_member": None}
         if persist:
@@ -67,10 +82,18 @@ def execute_customer(key, store_id, customer_id, *, observation_date=None, curre
                 else:
                     CustomerMembership.objects.filter(store_id=store_id, customer=customer, segment=definition).delete()
                 membership = {"updated": True, "is_member": is_member}
+                progress('membership.write.pending', 'Explicit membership decision written inside the current transaction.', segment=key, included=is_member)
+            else:
+                progress('membership.write.skipped', 'Membership was not requested or the outcome does not permit changing it.', segment=key)
             payload["membership_policy"] = {"requested": update_memberships, "updated": membership["updated"],
                 "threshold": str(membership_threshold) if update_memberships else None}
             payload["membership"] = membership
             SegmentPrediction.objects.update_or_create(store_id=store_id, customer=customer, segment=definition,
                 defaults={"segment_key": key, "status": result.status, "result": payload,
                           "observation_date": observation_date if key == "clv" else None})
+            progress('prediction.save.pending', 'Result written inside transaction; waiting for commit.', segment=key)
+            after_commit('prediction.save.committed', 'Prediction result committed to database.',
+                segment=key, store_id=store_id, customer_id=customer_id)
+        else:
+            progress('prediction.save.skipped', 'Persistence disabled; this result was not saved.', segment=key)
         return {"customer_id": str(customer.id), "persisted": persist, "membership": membership, **payload}
