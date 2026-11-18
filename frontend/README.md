@@ -37,6 +37,22 @@ Open `http://127.0.0.1:5173`. Vite proxies `/api` and `/health` to Django on
 port 8000. Set `BACKEND_PROXY_TARGET` in `frontend/.env` if the backend uses a
 different address. The dev server binds locally; no unrestricted CORS is needed.
 
+## Accounts (sign in / create account)
+
+The app opens on **Sign in**: **Continue with Google**, or an email + password.
+New accounts name their store; teammates who sign in with Google using the
+email they were added with go straight to that store. **Forgot password?**
+emails a one-time reset link (printed in the Django terminal until Gmail is
+configured). The backend
+(`backend/apps/users`) keeps people signed in with an HttpOnly cookie and the app
+renews the workspace token automatically. Apply `python manage.py migrate users`
+once; the Google button appears when `GOOGLE_CLIENT_ID` is set in `backend/.env`
+(see `backend/apps/users/README.md`).
+
+To use operator-issued developer tokens instead, set `VITE_ACCOUNT_SIGNIN=false`
+in `frontend/.env` (the browser tests do this), or choose **Use a developer
+workspace token instead** on the sign-in page.
+
 Use **Connect workspace** and enter an operator-issued store-user token:
 
 ```powershell

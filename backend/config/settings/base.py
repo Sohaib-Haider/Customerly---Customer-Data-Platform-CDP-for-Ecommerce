@@ -32,6 +32,7 @@ INSTALLED_APPS = [
     "apps.segments.apps.SegmentsConfig",
     "apps.analytics.apps.AnalyticsConfig",
     "apps.ingestion.apps.IngestionConfig",
+    "apps.users.apps.UsersConfig",
 ]
 
 MIDDLEWARE = [
@@ -89,7 +90,30 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # Domain APIs will define their authorization in a later implementation step.
 REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
+    # Sign-up / sign-in / reset endpoints, per client IP.
+    "DEFAULT_THROTTLE_RATES": {"auth": os.getenv("AUTH_THROTTLE_RATE", "30/minute")},
 }
+
+# Accounts (apps.users). Google sign-in uses an OAuth "Web application" client id
+# from Google Cloud Console (a public value); leave empty to offer only passwords.
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "").strip()
+AUTH_COOKIE_SECURE = True  # the stay-signed-in cookie is HTTPS-only outside local development
+
+# Password-reset emails. Links point at the frontend.
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://127.0.0.1:5173").strip()
+DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "Customerly <no-reply@customerly.local>")
+if os.getenv("EMAIL_HOST", "").strip():
+    # Real email, e.g. Gmail: EMAIL_HOST=smtp.gmail.com and a Google app password.
+    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+    EMAIL_HOST = os.getenv("EMAIL_HOST").strip()
+    EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
+    EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
+    EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
+    EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "true").lower() == "true"
+    EMAIL_TIMEOUT = 15
+else:
+    # No email account configured: emails (with their links) are printed in the Django terminal.
+    EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 
 LOGGING = {
     "version": 1,

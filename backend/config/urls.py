@@ -18,4 +18,5 @@ urlpatterns = [
     path("api/mapping/", include("apps.mapping.urls")),
     path("api/preprocessing/", include("apps.preprocessing.urls")),
     path("api/ingestion/", include("apps.ingestion.urls")),
+    path("api/auth/", include("apps.users.urls")),
 ]

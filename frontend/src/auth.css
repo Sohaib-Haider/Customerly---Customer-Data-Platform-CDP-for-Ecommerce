@@ -1,0 +1,25 @@
+/* Sign-in, sign-up and store onboarding screens. Uses the tokens in styles.css. */
+.auth-page { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; padding: 32px 16px; background: radial-gradient(1200px 600px at 50% -10%, #e8f0ff 0%, #f7f9fc 60%); }
+.auth-card { width: 100%; max-width: 420px; padding: 36px 34px 30px; border-radius: var(--radius); box-shadow: 0 18px 50px rgba(28, 41, 65, .08); }
+.auth-card h1 { font-size: 26px; margin: 18px 0 6px; }
+.auth-card > p { margin-bottom: 22px; }
+.auth-brand { display: flex; align-items: center; gap: 8px; font-family: 'Manrope Variable', sans-serif; font-weight: 750; font-size: 18px; color: var(--ink); }
+.auth-form { display: flex; flex-direction: column; gap: 14px; }
+.auth-form .field input { width: 100%; }
+.auth-footer { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--border); font-size: 13px; color: var(--muted); text-align: center; }
+.auth-footer a, .auth-footer .text-button { color: var(--blue); font-weight: 600; }
+.auth-dev { display: block; margin: 16px auto 0; font-size: 12px; color: var(--muted); }
+.auth-icon { display: flex; justify-content: center; align-items: center; width: 64px; height: 64px; margin: 4px auto 18px; border-radius: 50%; background: #eef3ff; color: var(--blue); }
+.auth-stores { display: flex; flex-direction: column; gap: 10px; }
+.auth-store { display: flex; align-items: center; gap: 12px; width: 100%; padding: 14px 16px; border: 1px solid var(--border); border-radius: 12px; background: #fff; text-align: left; }
+.auth-store:hover:not(:disabled) { border-color: var(--blue); }
+.auth-store span { flex: 1; display: flex; flex-direction: column; }
+.auth-store small { color: var(--muted); text-transform: capitalize; }
+.auth-note { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); margin: 0; }
+@media (max-width: 480px) { .auth-card { padding: 28px 20px 24px; } .auth-card h1 { font-size: 22px; } }
+.auth-google { display: flex; justify-content: center; min-height: 44px; margin-bottom: 4px; }
+.auth-google-busy { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.auth-divider { display: flex; align-items: center; gap: 12px; margin: 18px 0; color: var(--muted); font-size: 12px; }
+.auth-divider::before, .auth-divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+.auth-hint { margin: 14px 0 0; font-size: 12px; color: var(--muted); text-align: center; }
+.auth-forgot { align-self: flex-end; margin-top: -6px; font-size: 12px; color: var(--blue); font-weight: 600; }

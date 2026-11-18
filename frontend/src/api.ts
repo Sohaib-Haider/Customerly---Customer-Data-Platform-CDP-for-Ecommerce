@@ -13,10 +13,13 @@ export function readError(body: unknown, status?: number): string {
   return `The request could not complete${status ? ` (${status})` : ''}. Please try again.`;
 }
 
-export class ApiClient {
-  constructor(private token: string, private onExpired: () => void = () => {}) {}
+/** Renews the workspace token after a 401: a new token, null if renewal failed, undefined if not available. */
+export type Renew = () => Promise<string | null | undefined>;
 
-  async request<T = any>(path: string, options: RequestInit = {}): Promise<T> {
+export class ApiClient {
+  constructor(private token: string, private onExpired: () => void = () => {}, private renew?: Renew) {}
+
+  async request<T = any>(path: string, options: RequestInit = {}, retried = false): Promise<T> {
     const headers = new Headers(options.headers);
     headers.set('Accept', 'application/json');
     if (this.token) headers.set('Authorization', `Bearer ${this.token}`);
@@ -27,7 +30,12 @@ export class ApiClient {
       if (error instanceof DOMException && error.name === 'AbortError') throw error;
       throw new Error('Cannot reach the backend. Check that Django is running and the development proxy is configured.');
     }
-    if (response.status === 401) this.onExpired();
+    if (response.status === 401 && !retried) {
+      // Signed-in users: fetch a fresh workspace token and retry this request once.
+      const fresh = this.renew ? await this.renew().catch(() => null) : undefined;
+      if (fresh) return new ApiClient(fresh, this.onExpired).request<T>(path, options, true);
+      if (fresh === undefined) this.onExpired(); // developer-token mode: ask for a new token
+    } else if (response.status === 401) this.onExpired();
     const body = await response.json().catch(() => {
       throw new ApiError(response.status, { detail: `The backend returned a non-JSON response (HTTP ${response.status}) for ${path.split('?')[0]}. Restart Django and check its terminal for errors. If the status is 404, confirm the updated backend routes are running.` });
     });

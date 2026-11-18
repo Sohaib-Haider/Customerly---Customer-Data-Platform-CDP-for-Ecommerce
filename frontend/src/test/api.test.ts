@@ -48,3 +48,37 @@ describe('backend integration contracts', () => {
     expect(review.files[0].deduplicate).toBe(false);
   });
 });
+
+describe('signed-in workspace token renewal', () => {
+  it('renews an expired workspace token once and retries the request', async () => {
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce({ ok: false, status: 401, json: async () => ({ detail: 'expired' }) })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ results: [] }) });
+    vi.stubGlobal('fetch', fetcher);
+    const expired = vi.fn(); const renew = vi.fn().mockResolvedValue('fresh-token');
+    await expect(new ApiClient('old-token', expired, renew).get('/api/customers/')).resolves.toEqual({ results: [] });
+    expect(renew).toHaveBeenCalledOnce();
+    expect(fetcher.mock.calls[1][1].headers.get('Authorization')).toBe('Bearer fresh-token');
+    expect(expired).not.toHaveBeenCalled();
+  });
+  it('never loops: a rejected renewed token is not renewed again', async () => {
+    const fetcher = vi.fn().mockResolvedValue({ ok: false, status: 401, json: async () => ({ detail: 'expired' }) });
+    vi.stubGlobal('fetch', fetcher);
+    const renew = vi.fn().mockResolvedValue('fresh-token');
+    await expect(new ApiClient('old-token', vi.fn(), renew).get('/api/customers/')).rejects.toBeInstanceOf(ApiError);
+    expect(renew).toHaveBeenCalledOnce();
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+  it('a failed renewal does not open the developer token prompt', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 401, json: async () => ({ detail: 'expired' }) }));
+    const expired = vi.fn();
+    await expect(new ApiClient('old-token', expired, vi.fn().mockResolvedValue(null)).get('/api/customers/')).rejects.toBeInstanceOf(ApiError);
+    expect(expired).not.toHaveBeenCalled();
+  });
+  it('developer-token mode still asks for a new token', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 401, json: async () => ({ detail: 'expired' }) }));
+    const expired = vi.fn();
+    await expect(new ApiClient('old-token', expired, vi.fn().mockResolvedValue(undefined)).get('/api/customers/')).rejects.toBeInstanceOf(ApiError);
+    expect(expired).toHaveBeenCalledOnce();
+  });
+});

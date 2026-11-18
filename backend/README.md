@@ -17,6 +17,7 @@ Audience preparation also needs its durable job migration and a separate worker:
 
 ```powershell
 .venv/Scripts/python.exe backend/manage.py migrate segments
+.venv/Scripts/python.exe backend/manage.py migrate users
 .venv/Scripts/python.exe backend/manage.py process_segment_jobs --watch --workers 2 --batch-size 100
 ```
 
