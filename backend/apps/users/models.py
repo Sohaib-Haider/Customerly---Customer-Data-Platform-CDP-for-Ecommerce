@@ -10,6 +10,7 @@ class Account(models.Model):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     email = models.EmailField(max_length=255, unique=True)  # stored lower-case
+    full_name = models.CharField(max_length=150, blank=True, default="")
     password = models.CharField(max_length=256)  # Django hash; unusable for Google-only accounts
     google_sub = models.CharField(max_length=255, unique=True, null=True, blank=True)  # Google account id
     email_verified_at = models.DateTimeField(null=True, blank=True)  # set when Google proves the email

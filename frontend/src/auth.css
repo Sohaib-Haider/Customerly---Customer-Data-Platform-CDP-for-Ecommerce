@@ -23,3 +23,15 @@
 .auth-divider::before, .auth-divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
 .auth-hint { margin: 14px 0 0; font-size: 12px; color: var(--muted); text-align: center; }
 .auth-forgot { align-self: flex-end; margin-top: -6px; font-size: 12px; color: var(--blue); font-weight: 600; }
+.profile-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; align-items: start; }
+.profile-grid .section-heading h2 { display: flex; align-items: center; gap: 8px; }
+.profile-form { display: flex; flex-direction: column; gap: 14px; }
+.profile-form .field input { width: 100%; }
+.profile-form input:disabled { background: #f5f7fb; color: var(--muted); }
+.profile-saved { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 12px; color: #1f8a5b; }
+.profile-methods { display: flex; flex-direction: column; }
+.profile-methods > div { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; align-items: center; padding: 14px 0; border-top: 1px solid var(--border); }
+.profile-methods > div:first-child { border-top: 0; }
+.profile-methods span { grid-column: 1; font-size: 12px; color: var(--muted); }
+.profile-methods .badge { grid-row: 1 / span 2; grid-column: 2; }
+.connection-intro + .button.full { margin-bottom: 10px; }

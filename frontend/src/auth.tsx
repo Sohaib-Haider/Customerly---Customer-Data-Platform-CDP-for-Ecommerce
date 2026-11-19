@@ -16,7 +16,7 @@ const accounts = new ApiClient('');
 export function problem(error: unknown): string {
   if (error instanceof ApiError) {
     const body = error.body || {};
-    const fields = ['detail', 'email', 'password', 'name'].flatMap(key => body[key] ?? []);
+    const fields = ['detail', 'email', 'password', 'name', 'full_name', 'current_password', 'new_password'].flatMap(key => body[key] ?? []);
     if (fields.length) return fields.join(' ');
   }
   return error instanceof Error ? error.message : 'Something went wrong. Please try again.';

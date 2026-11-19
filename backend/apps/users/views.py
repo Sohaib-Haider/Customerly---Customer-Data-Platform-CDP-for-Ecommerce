@@ -167,6 +167,44 @@ class ResetPasswordView(AccountView):
         return response
 
 
+class ProfileView(AccountView):
+    """GET -> the signed-in account's profile. PATCH {full_name} -> update it."""
+
+    def get(self, request):
+        account = self.account(request)
+        if account is None:
+            return Response({"detail": "Please sign in."}, status=401)
+        return Response(services.profile(account))
+
+    def patch(self, request):
+        account = self.account(request)
+        if account is None:
+            return Response({"detail": "Please sign in."}, status=401)
+        full_name = " ".join(_text(request, "full_name", 200).split())
+        if not 2 <= len(full_name) <= 150:
+            return Response({"full_name": "Enter your full name (2 to 150 characters)."}, status=400)
+        account.full_name = full_name
+        account.save(update_fields=["full_name", "updated_at"])
+        return Response(services.profile(account))
+
+
+class ChangePasswordView(AccountView):
+    """POST {current_password, new_password}. Other sessions end; this browser stays signed in."""
+
+    def post(self, request):
+        account = self.account(request)
+        if account is None:
+            return Response({"detail": "Please sign in."}, status=401)
+        try:
+            account = services.change_password(account, _text(request, "current_password", 128),
+                                               _text(request, "new_password", 128))
+        except SignInError as error:
+            return Response({"current_password": str(error)}, status=400)
+        except ValidationError as error:
+            return Response({"new_password": list(error.messages)}, status=400)
+        return self.signed_in_response(Response({"status": "password_changed", **services.profile(account)}), account)
+
+
 class SignOutView(AccountView):
     def post(self, request):
         response = Response({"status": "signed_out"})

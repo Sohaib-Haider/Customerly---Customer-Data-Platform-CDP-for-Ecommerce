@@ -64,7 +64,17 @@ Test it with `python manage.py sendtestemail you@example.com`.
 | POST | `store/` | `name` | `201` new store with the account as owner; `409` if it already has one |
 | POST | `forgot-password/` | `email` | always `200`; `503` if the email could not be sent |
 | POST | `reset-password/` | `token, password` | `200`; `400` weak password or invalid/used/expired link |
+| GET | `profile/` | – | `email, full_name, has_password, google_linked, email_verified, created_at`; `401` when signed out |
+| PATCH | `profile/` | `full_name` | updated profile; `400` unless 2–150 characters |
+| POST | `change-password/` | `current_password, new_password` | `200` and a fresh cookie; other devices are signed out. `400` wrong current password or weak new one. A Google-only account sets its first password without `current_password` |
 | POST | `signout/` | – | clears the cookie |
+
+## Profile page
+
+`/profile` in the frontend (workspace menu, top right → **Your profile**) lets
+the signed-in person edit their full name, see their sign-in methods and change
+their password (or set one if they only use Google). The email cannot be
+changed there. Google sign-in fills the name from the Google account if it is empty.
 
 ## Security
 
@@ -84,8 +94,8 @@ Test it with `python manage.py sendtestemail you@example.com`.
 
 ## Setup
 
-1. Apply the migration once to the shared database (from `backend/`):
-   `python manage.py migrate users`
+1. Apply the migrations to the shared database (from `backend/`):
+   `python manage.py migrate users` (`0002` adds `full_name` for the profile page)
 2. Google sign-in (optional; without it only email + password is offered):
    - [Google Cloud Console](https://console.cloud.google.com/) → create a
      project → **APIs & Services → OAuth consent screen**: External, app name,

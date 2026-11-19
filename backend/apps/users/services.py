@@ -124,10 +124,13 @@ def google_account(claims: dict) -> Account:
         account = Account.objects.select_for_update().filter(google_sub=sub).first()
         if account is None:
             account = Account.objects.select_for_update().filter(email=email).first()
+        name = str(claims.get("name") or "").strip()[:150]
         if account is None:
-            return Account.objects.create(email=email, password=make_password(None), google_sub=sub, email_verified_at=now)
+            return Account.objects.create(email=email, password=make_password(None), google_sub=sub,
+                                          email_verified_at=now, full_name=name)
         # Google proved this email: link it, mark it verified and clear any lock.
         account.google_sub = sub
+        account.full_name = account.full_name or name
         account.email_verified_at = account.email_verified_at or now
         account.failed_logins, account.locked_until = 0, None
         account.save()
@@ -161,6 +164,28 @@ def session_token(account: Account) -> str:
 
 def account_from_session(token: str) -> Account | None:
     return _unsign("session", token, SESSION_MAX_AGE)
+
+
+# ------------------------------------------------------------------- profile
+def has_password(account: Account) -> bool:
+    return not account.password.startswith("!")  # "!" = Django's unusable password (Google-only)
+
+
+def profile(account: Account) -> dict:
+    return {"email": account.email, "full_name": account.full_name, "has_password": has_password(account),
+            "google_linked": bool(account.google_sub), "email_verified": account.email_verified,
+            "created_at": account.created_at.isoformat()}
+
+
+def change_password(account: Account, current: str, new: str) -> Account:
+    """Change (or, for a Google-only account, set) the password while signed in."""
+    if has_password(account) and not check_password(current, account.password):
+        raise SignInError("invalid", "Your current password is incorrect.")
+    check_new_password(new, account.email)
+    account.password = make_password(new)  # ends every other session (see _fingerprint)
+    account.failed_logins, account.locked_until = 0, None
+    account.save()
+    return account
 
 
 # ----------------------------------------------------------- forgot password

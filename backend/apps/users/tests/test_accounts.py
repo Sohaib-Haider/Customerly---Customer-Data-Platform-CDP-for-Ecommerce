@@ -263,3 +263,53 @@ def test_google_only_account_can_add_a_password_by_reset(tables):
     APIClient().post("/api/auth/forgot-password/", {"email": EMAIL}, format="json")
     APIClient().post("/api/auth/reset-password/", {"token": reset_link_token(), "password": "New-Kettle-77"}, format="json")
     assert sign_in(APIClient(), password="New-Kettle-77").status_code == 200
+
+
+# -------------------------------------------------------------------- profile
+def test_profile_requires_sign_in(tables):
+    assert APIClient().get("/api/auth/profile/").status_code == 401
+    assert APIClient().patch("/api/auth/profile/", {"full_name": "Zoha"}, format="json").status_code == 401
+    assert APIClient().post("/api/auth/change-password/", {}, format="json").status_code == 401
+
+
+def test_profile_shows_and_updates_the_full_name(tables):
+    client = APIClient()
+    sign_up(client)
+    body = client.get("/api/auth/profile/").json()
+    assert body["email"] == EMAIL and body["full_name"] == "" and body["has_password"] and not body["google_linked"]
+    assert client.patch("/api/auth/profile/", {"full_name": " x "}, format="json").status_code == 400
+    updated = client.patch("/api/auth/profile/", {"full_name": "  Zoha   Faiz "}, format="json").json()
+    assert updated["full_name"] == "Zoha Faiz" and Account.objects.get().full_name == "Zoha Faiz"
+
+
+def test_google_fills_the_full_name(tables):
+    claims = {"sub": "g-9", "email": EMAIL, "email_verified": True, "name": "Zoha Faiz"}
+    client = APIClient()
+    with patch("apps.users.services.verify_google_credential", return_value=claims):
+        client.post("/api/auth/google/", {"credential": "t"}, format="json")
+    body = client.get("/api/auth/profile/").json()
+    assert body["full_name"] == "Zoha Faiz" and body["google_linked"] and not body["has_password"]
+
+
+def test_change_password_keeps_this_browser_and_ends_other_sessions(tables):
+    client, other = APIClient(), APIClient()
+    sign_up(client)
+    sign_in(other)
+    wrong = client.post("/api/auth/change-password/", {"current_password": "Nope-Nope-1", "new_password": "New-Kettle-77"}, format="json")
+    assert wrong.status_code == 400 and "current_password" in wrong.json()
+    weak = client.post("/api/auth/change-password/", {"current_password": PASSWORD, "new_password": "password123"}, format="json")
+    assert weak.status_code == 400 and "new_password" in weak.json()
+    ok = client.post("/api/auth/change-password/", {"current_password": PASSWORD, "new_password": "New-Kettle-77"}, format="json")
+    assert ok.status_code == 200
+    assert client.get("/api/auth/profile/").status_code == 200  # this browser stays signed in
+    assert other.get("/api/auth/profile/").status_code == 401   # other sessions end
+    assert sign_in(APIClient()).status_code == 401
+    assert sign_in(APIClient(), password="New-Kettle-77").status_code == 200
+
+
+def test_google_only_account_can_set_a_password_without_a_current_one(tables):
+    client = APIClient()
+    google(client)
+    ok = client.post("/api/auth/change-password/", {"current_password": "", "new_password": "New-Kettle-77"}, format="json")
+    assert ok.status_code == 200 and ok.json()["has_password"]
+    assert sign_in(APIClient(), password="New-Kettle-77").status_code == 200
